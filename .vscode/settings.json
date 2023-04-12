@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "features.h": "c",
+        "stat.h": "c"
+    }
+}
