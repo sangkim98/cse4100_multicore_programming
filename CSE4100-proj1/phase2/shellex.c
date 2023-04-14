@@ -6,22 +6,31 @@
 /* Function prototypes */
 void eval(char *cmdline);
 int parseline(char *buf, char **argv);
-int builtin_command(char **argv); 
+int builtin_command(char **argv);
 
 int main() 
 {
+    int save_history_counter = 0; 
     char cmdline[MAXLINE]; /* Command line */
+
+    set_shell_history_location();
+    open_shell_history();
 
     while (1) {
 	/* Read */
-	printf("> ");                   
-	fgets(cmdline, MAXLINE, stdin); 
-	if (feof(stdin))
-	    exit(0);
+        printf("CSE4100-MP-P1> ");                   
+        fgets(cmdline, MAXLINE, stdin); 
+        if (feof(stdin))
+            exit(0);
+        /* Evaluate */
+        eval(cmdline);
 
-	/* Evaluate */
-	eval(cmdline);
-    } 
+        save_history_counter++;
+    }
+
+    save_shell_history();
+    
+    return 0;
 }
 /* $end shellmain */
   
@@ -29,39 +38,84 @@ int main()
 /* eval - Evaluate a command line */
 void eval(char *cmdline) 
 {
-    char *argv[MAXARGS]; /* Argument list execve() */
-    char buf[MAXLINE];   /* Holds modified command line */
-    int bg;              /* Should the job run in bg or fg? */
-    pid_t pid;           /* Process id */
+    char *argv[MAXARGS];   /* Argument list execve() */
+    char buf[MAXLINE];     /* Holds modified command line */
+    char name[MAXLINE];    /* Holds name of program */
+    int bg;                /* Should the job run in bg or fg? */
+    int builtin_condition; /*  */
+    pid_t pid;             /* Process id */
     
-    strcpy(buf, cmdline);
-    bg = parseline(buf, argv); 
-    if (argv[0] == NULL)  
-	return;   /* Ignore empty lines */
-    if (!builtin_command(argv)) { //quit -> exit(0), & -> ignore, other -> run
-        if (execve(argv[0], argv, environ) < 0) {	//ex) /bin/ls ls -al &
-            printf("%s: Command not found.\n", argv[0]);
-            exit(0);
+    builtin_condition = 0;
+
+    do{
+        strcpy(buf, cmdline);
+        bg = parseline(buf, argv);
+
+        if (argv[0] == NULL)  
+            return;   /* Ignore empty lines */
+        add_command_to_history(cmdline);
+        save_shell_history();
+        open_shell_history();
+        if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+            if ((pid = Fork()) == 0){
+                strcpy(name, "/bin/");
+                strcat(name, argv[0]);
+
+                if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
+                    printf("%s: Command not found.\n", argv[0]);
+                    exit(0);
+                }
+            }
+
+            if (!bg){ 
+                int status;
+                Waitpid(pid, &status, 0);
+            }
+            else { //when there is backgrount process!
+                printf("%d %s", pid, cmdline);
+
+            }
         }
+        else if(builtin_condition == 2){
+            builtin_condition = history_command(argv[0], cmdline);
+        }
+    } while (builtin_condition == 2);
 
 	/* Parent waits for foreground job to terminate */
-	if (!bg){ 
-	    int status;
-	}
-	else//when there is backgrount process!
-	    printf("%d %s", pid, cmdline);
-    }
+
     return;
 }
 
 /* If first arg is a builtin command, run it and return true */
 int builtin_command(char **argv) 
 {
-    if (!strcmp(argv[0], "quit")) /* quit command */
-	exit(0);  
-    if (!strcmp(argv[0], "&"))    /* Ignore singleton & */
-	return 1;
-    return 0;                     /* Not a builtin command */
+    if (!strcmp(argv[0], "quit"))    /* quit command */
+        exit(0);
+    if (!strcmp(argv[0], "exit"))    /* exit command */
+        exit(0);
+    if (!strcmp(argv[0], "&"))       /* Ignore singleton & */
+	    return 1;
+    if (!strcmp(argv[0], "cd")){    /* change directory */
+        if(argv[1] == NULL){
+            if(chdir(getenv("HOME")))
+                unix_error("cd HOME error");
+        }
+        else{
+            if(chdir(argv[1]))
+                printf("%s : directory not found\n", argv[1]);
+        }
+
+        return 1;
+    }
+    if (!strcmp(argv[0], "history")){ /* print command history */
+        history();
+        return 1;
+    }
+    if (argv[0][0] == '!'){
+        return 2;
+    }
+
+    return 0;                        /* Not a builtin command */
 }
 /* $end eval */
 
@@ -75,28 +129,26 @@ int parseline(char *buf, char **argv)
 
     buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* Ignore leading spaces */
-	buf++;
+	    buf++;
 
     /* Build the argv list */
     argc = 0;
     while ((delim = strchr(buf, ' '))) {
-	argv[argc++] = buf;
-	*delim = '\0';
-	buf = delim + 1;
-	while (*buf && (*buf == ' ')) /* Ignore spaces */
+	    argv[argc++] = buf;
+	    *delim = '\0';
+	    buf = delim + 1;
+	    while (*buf && (*buf == ' ')) /* Ignore spaces */
             buf++;
     }
     argv[argc] = NULL;
     
     if (argc == 0)  /* Ignore blank line */
-	return 1;
+	    return 1;
 
     /* Should the job run in the background? */
     if ((bg = (*argv[argc-1] == '&')) != 0)
-	argv[--argc] = NULL;
+	    argv[--argc] = NULL;
 
     return bg;
 }
 /* $end parseline */
-
-
