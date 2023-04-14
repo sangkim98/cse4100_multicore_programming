@@ -1042,13 +1042,14 @@ int set_shell_history_location(void){
 }
 
 void open_shell_history(void){
-    set_shell_history_location();
     history_fp = fopen(shell_history_location, "r");
 
     if(history_fp == NULL){
         history_fp = fopen(shell_history_location, "w");
+
         fputs("0", history_fp);
         fclose(history_fp);
+
         history_fp = fopen(shell_history_location, "r");
     }
 
@@ -1075,10 +1076,14 @@ void set_shell_history_memory(char* hist_cmdline){
     prev_p = hist_head;
     for(int i = 0; i < hist_head->value.num_entries; i++){
         Fgets(hist_cmdline, MAXLINE, history_fp);
+
         command_len = strlen(hist_cmdline)+1;
+
         hist_p = (HIST_ENTRY*)malloc(sizeof(HIST_ENTRY));
         hist_p->value.cmdline = (char*)malloc(sizeof(char) * command_len);
+
         strcpy(hist_p->value.cmdline, hist_cmdline);
+
         prev_p->next_data = hist_p;
         prev_p = hist_p;
     }
@@ -1115,6 +1120,11 @@ void add_command_to_history(char *cmdline){
     int cmd_len;
     HIST_ENTRY *hist_p;
 
+    if(!strcmp(cmdline, "!!\n"))
+        return;
+    if(cmdline[0] == '!' && digits_only(cmdline+1))
+        return;
+
     cmd_len = strlen(cmdline) + 1;
     cmd_curr = (char*)Malloc(sizeof(char) * cmd_len);
 
@@ -1122,6 +1132,8 @@ void add_command_to_history(char *cmdline){
 
     hist_p = (HIST_ENTRY*)Malloc(sizeof(HIST_ENTRY));
     hist_p->value.cmdline = cmd_curr;
+
+    remove_command_from_history(cmdline);
 
     hist_tail->next_data = hist_p;
     hist_tail = hist_p;
@@ -1131,32 +1143,85 @@ void add_command_to_history(char *cmdline){
 }
 
 void remove_command_from_history(char *cmd){
+    HIST_ENTRY *hist_p, *prev_p;
 
+    prev_p = hist_head;
+    hist_p = hist_head->next_data;
+
+    while(hist_p != NULL){
+        if(!strcmp(hist_p->value.cmdline, cmd))
+            break;
+            
+        prev_p = hist_p;
+        hist_p = hist_p->next_data;
+    }
+
+    if(hist_p != NULL){
+        hist_head->value.num_entries--;
+        
+        if(hist_p == hist_tail){
+            hist_tail = prev_p;
+        }
+
+        prev_p->next_data = hist_p->next_data;
+        free(hist_p->value.cmdline);
+        free(hist_p);
+    }
 }
 
-int history_command(char* exclamation_follow_string){
-    if (!strcmp(exclamation_follow_string, "!")){
-        
+int history_command(char* extension, char* cmdline){
+    if (!strcmp(extension, "!!")){
+        if(hist_head->next_data == NULL){
+            return 0;
+        }
+        strcpy(cmdline, hist_tail->value.cmdline);
+        printf("%s", cmdline);
     }
-    if (digits_only(exclamation_follow_string)){
+    else if (digits_only(extension+1)){
+        int n;
+        HIST_ENTRY* hist_p;
+
+        sscanf(extension+1,"%d", &n);
+
+        hist_p = hist_head->next_data;
+        for(int i = 1; i < n && hist_p != NULL; i++){
+            hist_p = hist_p->next_data;
+        }
+        
+        if(hist_p == NULL){
+            return 0;
+        }
+
+        strcpy(cmdline, hist_p->value.cmdline);
 
     }
     else{
-
+        return 0;
     }
 
-    return 0;
+    return 2;
 }
 
 void history(void){
+    HIST_ENTRY *hist_p;
+
+    hist_p = hist_head->next_data;
+    while(hist_p != NULL){
+        printf("%s",hist_p->value.cmdline);
+        hist_p = hist_p->next_data;
+    }
 
     return;
 }
 
 int digits_only(char* arg){
-    int len;
+    int len = 0;
+    
+    while((arg[len] != '\0') && (arg[len] != '\n') && (arg[len] != ' '))
+        len++;
 
-    len = strlen(arg);
+    if(len == 0)
+        return 0;
 
     for(int i = 0; i < len; i++){
         if(!isdigit(arg[i]))
@@ -1166,9 +1231,4 @@ int digits_only(char* arg){
     return 1;
 }
 
-
 /* $end csapp.c */
-
-
-
-

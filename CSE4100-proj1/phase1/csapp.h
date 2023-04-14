@@ -216,8 +216,8 @@ void open_shell_history(void);
 void set_shell_history_memory(char* hist_cmdline);
 void save_shell_history(void);
 void add_command_to_history(char *cmdline);
-void remove_command_to_history(char *cmd);
-int history_command(char* exclamation_follow_string);
+void remove_command_from_history(char *cmd);
+int history_command(char* extension, char* cmdline);
 void history(void);
 int digits_only(char* arg);
 
