@@ -6,11 +6,14 @@
 /* Function prototypes */
 void eval(char *cmdline);
 int parseline(char *buf, char **argv);
-int builtin_command(char **argv); 
+int builtin_command(char **argv);
 
 int main() 
 {
+    int save_history_counter = 0; 
     char cmdline[MAXLINE]; /* Command line */
+
+    open_shell_history();
 
     while (1) {
 	/* Read */
@@ -18,11 +21,17 @@ int main()
         fgets(cmdline, MAXLINE, stdin); 
         if (feof(stdin))
             exit(0);
-
         /* Evaluate */
         eval(cmdline);
+
+        save_shell_history();
+        open_shell_history();
+
+        save_history_counter++;
     }
 
+    save_shell_history();
+    
     return 0;
 }
 /* $end shellmain */
@@ -38,9 +47,11 @@ void eval(char *cmdline)
     pid_t pid;           /* Process id */
     
     strcpy(buf, cmdline);
-    bg = parseline(buf, argv); 
+    bg = parseline(buf, argv);
+
     if (argv[0] == NULL)  
 	    return;   /* Ignore empty lines */
+    add_command_to_history(cmdline);
     if (!builtin_command(argv)) { //quit -> exit(0), & -> ignore, other -> run
         if ((pid = Fork()) == 0){
             strcpy(name, "/bin/");
@@ -51,12 +62,15 @@ void eval(char *cmdline)
                 exit(0);
             }
         }
+
         if (!bg){ 
             int status;
             Waitpid(pid, &status, 0);
         }
-        else//when there is backgrount process!
+        else { //when there is backgrount process!
             printf("%d %s", pid, cmdline);
+
+        }
     }
 
 	/* Parent waits for foreground job to terminate */
@@ -67,12 +81,18 @@ void eval(char *cmdline)
 /* If first arg is a builtin command, run it and return true */
 int builtin_command(char **argv) 
 {
-    if (!strcmp(argv[0], "quit"))    /* quit command */
-	    exit(0); 
-    if (!strcmp(argv[0], "exit"))
+    if (!strcmp(argv[0], "quit")){     /* quit command */
+
         exit(0);
-    if (!strcmp(argv[0], "&"))       /* Ignore singleton & */
+    }
+    if (!strcmp(argv[0], "exit")){    /* exit command */
+
+        exit(0);
+    }
+    if (!strcmp(argv[0], "&")){        /* Ignore singleton & */
+
 	    return 1;
+    }
     if (!strcmp(argv[0], "cd")){      /* change directory */
         if(argv[1] == NULL){
             chdir(getenv("HOME"));
@@ -80,14 +100,20 @@ int builtin_command(char **argv)
         else{
             chdir(argv[1]);
         }
-        
         if(errno == ENOENT)
             unix_error("cd error");
-        
+
         return 1;
     }
-    if (!strcmp(argv[0], "history")) /* print command history */
-        return 0;
+    if (!strcmp(argv[0], "history")){ /* print command history */
+        history();
+        return 1;
+    }
+    if (argv[0][0] == '!'){
+        history_command(argv[0]+1);
+        return 1;
+    }
+
     return 0;                        /* Not a builtin command */
 }
 /* $end eval */

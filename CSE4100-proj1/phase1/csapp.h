@@ -51,6 +51,17 @@ typedef struct {
 } rio_t;
 /* $end rio_t */
 
+/* Structs for history */
+/* $begin history structs */
+typedef struct _hist_entry {
+    union _value{
+        int num_entries;
+        char* cmdline;
+    } value;
+    struct _hist_entry* next_data;
+} HIST_ENTRY;
+/* $end history structs */
+
 /* External variables */
 extern int h_errno;    /* Defined by BIND for DNS errors */ 
 extern char **environ; /* Defined by libc */
@@ -59,6 +70,7 @@ extern char **environ; /* Defined by libc */
 #define	MAXLINE	 8192  /* Max text line length */
 #define MAXBUF   8192  /* Max I/O buffer size */
 #define LISTENQ  1024  /* Second argument to listen() */
+#define SHELL_HIST_FNAME "/.shell_history"
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -194,6 +206,20 @@ int open_listenfd(char *port);
 int Open_clientfd(char *hostname, char *port);
 int Open_listenfd(char *port);
 
+/* History implementation */
+char shell_history_location[MAXLINE];
+FILE* history_fp;
+HIST_ENTRY *hist_head, *hist_tail;
+
+int set_shell_history_location(void);
+void open_shell_history(void);
+void set_shell_history_memory(char* hist_cmdline);
+void save_shell_history(void);
+void add_command_to_history(char *cmdline);
+void remove_command_to_history(char *cmd);
+int history_command(char* exclamation_follow_string);
+void history(void);
+int digits_only(char* arg);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */
