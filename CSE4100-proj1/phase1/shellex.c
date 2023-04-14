@@ -14,7 +14,6 @@ int main()
     char cmdline[MAXLINE]; /* Command line */
 
     set_shell_history_location();
-    open_shell_history();
 
     while (1) {
 	/* Read */
@@ -27,8 +26,6 @@ int main()
 
         save_history_counter++;
     }
-
-    save_shell_history();
     
     return 0;
 }
@@ -53,9 +50,9 @@ void eval(char *cmdline)
 
         if (argv[0] == NULL)  
             return;   /* Ignore empty lines */
+        open_shell_history();
         add_command_to_history(cmdline);
         save_shell_history();
-        open_shell_history();
         if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
             if ((pid = Fork()) == 0){
                 strcpy(name, "/bin/");

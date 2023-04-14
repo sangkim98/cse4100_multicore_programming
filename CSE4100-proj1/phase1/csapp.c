@@ -1203,12 +1203,15 @@ int history_command(char* extension, char* cmdline){
 }
 
 void history(void){
+    int idx;
     HIST_ENTRY *hist_p;
 
+    idx = 1;
     hist_p = hist_head->next_data;
     while(hist_p != NULL){
-        printf("%s",hist_p->value.cmdline);
+        printf("%d  %s", idx, hist_p->value.cmdline);
         hist_p = hist_p->next_data;
+        idx++;
     }
 
     return;
