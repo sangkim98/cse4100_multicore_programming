@@ -7,6 +7,12 @@
 void eval(char *cmdline);
 int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
+/* Redirection and Pipe Implementation */
+int token_pipe_command(char** piped_commands, char* cmdline);
+int run_pipe(char** piped_commands, const int num_piped_commands);
+void run_child();
+void run_child1(int *fd, char* cmdline);
+void run_child2(int *fd, char* cmdline);
 
 int main() 
 {
@@ -26,7 +32,7 @@ int main()
 
         save_history_counter++;
     }
-    
+
     return 0;
 }
 /* $end shellmain */
@@ -37,9 +43,13 @@ void eval(char *cmdline)
 {
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
+    char pipe_buf[MAXLINE];
     char name[MAXLINE];    /* Holds name of program */
     int bg;                /* Should the job run in bg or fg? */
     int builtin_condition; /*  */
+    char *piped_commands[MAXPIPES];
+    int num_piped_commands;
+
     pid_t pid;             /* Process id */
     
     builtin_condition = 0;
@@ -53,28 +63,43 @@ void eval(char *cmdline)
         open_shell_history();
         add_command_to_history(cmdline);
         save_shell_history();
-        if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
-            if ((pid = Fork()) == 0){
-                strcpy(name, "/bin/");
-                strcat(name, argv[0]);
 
-                if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
-                    printf("%s: Command not found.\n", argv[0]);
-                    exit(0);
+        if(strpbrk(cmdline, "|") != NULL){
+            strcpy(pipe_buf, cmdline);
+
+            if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
+                printf("pipe error\n");
+                return;
+            }
+
+            run_pipe(piped_commands, num_piped_commands);
+
+            return;
+        }
+        else{
+            if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+                if ((pid = Fork()) == 0){
+                    strcpy(name, "/bin/");
+                    strcat(name, argv[0]);
+
+                    if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
+                        printf("%s: Command not found.\n", argv[0]);
+                        exit(0);
+                    }
+                }
+
+                if (!bg){ 
+                    int status;
+                    Waitpid(pid, &status, 0);
+                }
+                else { //when there is backgrount process!
+                    printf("%d %s", pid, cmdline);
+
                 }
             }
-
-            if (!bg){ 
-                int status;
-                Waitpid(pid, &status, 0);
+            else if(builtin_condition == 2){
+                builtin_condition = history_command(argv[0], cmdline);
             }
-            else { //when there is backgrount process!
-                printf("%d %s", pid, cmdline);
-
-            }
-        }
-        else if(builtin_condition == 2){
-            builtin_condition = history_command(argv[0], cmdline);
         }
     } while (builtin_condition == 2);
 
@@ -124,7 +149,8 @@ int parseline(char *buf, char **argv)
     int argc;            /* Number of args */
     int bg;              /* Background job? */
 
-    buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
+    if((buf[strlen(buf)-1]) == '\n')
+        buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* Ignore leading spaces */
 	    buf++;
 
@@ -149,3 +175,116 @@ int parseline(char *buf, char **argv)
     return bg;
 }
 /* $end parseline */
+
+/*  */
+int token_pipe_command(char** piped_commands, char* cmdline){
+    char *strtok_ptr;
+    int pipe_idx;
+
+    strtok_ptr = strtok(cmdline, "|");
+    pipe_idx = 0;
+
+    while(strtok_ptr != NULL){
+        piped_commands[pipe_idx] = strtok_ptr;
+
+        strtok_ptr = strtok(NULL, "|");
+        
+        pipe_idx++;
+
+        if(pipe_idx > MAXPIPES){
+            printf("max piping exceeded : ");
+            return 0;
+        }
+    }
+
+    return pipe_idx;
+}
+
+int run_pipe(char** piped_commands, const int num_piped_commands){
+    int fd[2], status;
+    pid_t pid;
+
+    pipe(fd);
+
+    run_child1(fd, piped_commands[0]);
+    run_child2(fd, piped_commands[1]);
+
+    close(fd[0]);
+    close(fd[1]);
+
+    while(wait(&status) != -1);
+}
+
+void run_child1(int *fd, char* cmdline){
+    char *argv[MAXARGS];   /* Argument list execve() */
+    char buf[MAXLINE];     /* Holds modified command line */
+    char name[MAXLINE];    /* Holds name of program */
+    pid_t pid;
+
+    strcpy(buf, cmdline);
+
+    parseline(buf, argv);
+
+    if((pid = Fork()) == 0){
+        strcpy(name, "/bin/");
+        strcat(name, argv[0]);
+
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+
+        if (execvp(name, argv) < 0) {	//ex) /bin/ls ls -al &
+            printf("%s: Command not found.\n", argv[0]);
+            exit(0);
+        }
+    }
+}
+
+void run_child2(int *fd, char* cmdline){
+    char *argv[MAXARGS];   /* Argument list execve() */
+    char buf[MAXLINE];     /* Holds modified command line */
+    char name[MAXLINE];    /* Holds name of program */
+    pid_t pid;
+
+    strcpy(buf, cmdline);
+
+    parseline(buf, argv);
+
+    if((pid = Fork()) == 0){
+        strcpy(name, "/bin/");
+        strcat(name, argv[0]);
+
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[1]);
+
+        if (execvp(name, argv) < 0) {	//ex) /bin/ls ls -al &
+            printf("%s: Command not found.\n", argv[0]);
+            exit(0);
+        }
+    }
+}
+
+void run_child(int *fd, char* cmdline, int rw){
+    char *argv[MAXARGS];   /* Argument list execve() */
+    char buf[MAXLINE];     /* Holds modified command line */
+    char name[MAXLINE];    /* Holds name of program */
+    pid_t pid;
+
+    strcpy(buf, cmdline);
+
+    parseline(buf, argv);
+
+    if((pid = Fork()) == 0){
+        strcpy(name, "/bin/");
+        strcat(name, argv[0]);
+
+
+
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[1]);
+
+        if (execvp(name, argv) < 0) {	//ex) /bin/ls ls -al &
+            printf("%s: Command not found.\n", argv[0]);
+            exit(0);
+        }
+    }  
+}
