@@ -7,6 +7,7 @@
 void eval(char *cmdline);
 int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
+int getexecpath(char* path_name, char* exec_name);
 
 int main() 
 {
@@ -55,8 +56,7 @@ void eval(char *cmdline)
         save_shell_history();
         if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
             if ((pid = Fork()) == 0){
-                strcpy(name, "/bin/");
-                strcat(name, argv[0]);
+                getexecpath(name, argv[0]);
 
                 if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
                     printf("%s: Command not found.\n", argv[0]);
@@ -121,16 +121,34 @@ int builtin_command(char **argv)
 int parseline(char *buf, char **argv) 
 {
     char *delim;         /* Points to first space delimiter */
+    char *temp;
     int argc;            /* Number of args */
     int bg;              /* Background job? */
+    int condition;
 
     buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* Ignore leading spaces */
 	    buf++;
 
+    condition = 0;
+
     /* Build the argv list */
     argc = 0;
     while ((delim = strchr(buf, ' '))) {
+        if(*buf == '\"'){
+            temp = ++buf;
+            while((*temp) != '\"' && (*temp) != '\0'){
+                temp++;
+            }
+            delim = temp;
+        }
+        if(*buf == '\''){
+            temp = ++buf;
+            while((*temp) != '\'' && (*temp) != '\0'){
+                temp++;
+            }
+            delim = temp;
+        }
 	    argv[argc++] = buf;
 	    *delim = '\0';
 	    buf = delim + 1;
@@ -149,3 +167,40 @@ int parseline(char *buf, char **argv)
     return bg;
 }
 /* $end parseline */
+
+int getexecpath(char* path_name, char* exec_name){
+    char *path;
+    char *token_ptr;
+
+    const char *temp = getenv("PATH");
+
+    if (temp != NULL){
+        path =(char*)malloc(strlen(temp)+1);
+        if(path == NULL){
+            printf("getexecpath malloc fail\n");
+            return 0;
+        }
+        else{
+            strcpy(path, temp);
+        }
+    }
+
+    token_ptr = strtok(path, ":");
+    while(token_ptr != NULL){
+        strcpy(path_name, token_ptr);
+        strcat(path_name, "/");
+        strcat(path_name, exec_name);
+
+        if(!access(path_name, X_OK))
+            break;
+
+        token_ptr = strtok(NULL, ":");
+    }
+
+    free(path);
+
+    if(token_ptr == NULL)
+        return 0;
+
+    return 1;
+}
