@@ -71,7 +71,7 @@ extern char **environ; /* Defined by libc */
 #define MAXBUF   8192  /* Max I/O buffer size */
 #define LISTENQ  1024  /* Second argument to listen() */
 #define SHELL_HIST_FNAME "/.shell_history"
-#define MAXPIPES 2
+#define MAXPIPES 50
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
