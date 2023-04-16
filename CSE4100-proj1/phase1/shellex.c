@@ -1,7 +1,7 @@
 /* $begin shellmain */
 #include "csapp.h"
 #include<errno.h>
-#define MAXARGS   128
+#define MAXARGS 128
 
 /* Function prototypes */
 void eval(char *cmdline);
