@@ -63,42 +63,40 @@ void eval(char *cmdline)
         add_command_to_history(cmdline);
         save_shell_history();
 
-        if(strpbrk(cmdline, "|") != NULL){
-            strcpy(pipe_buf, cmdline);
+        if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+            if(strpbrk(cmdline, "|") != NULL){
+                strcpy(pipe_buf, cmdline);
 
-            if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
-                printf("pipe error\n");
+                if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
+                    printf("pipe error\n");
+                    return;
+                }
+
+                run_pipe(piped_commands, num_piped_commands);
+
                 return;
             }
+            else if ((pid = Fork()) == 0){
+                getexecpath(name, argv[0]);
 
-            run_pipe(piped_commands, num_piped_commands);
-
-            return;
-        }
-        else{
-            if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
-                if ((pid = Fork()) == 0){
-                    getexecpath(name, argv[0]);
-
-                    if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
-                        printf("%s: Command not found.\n", argv[0]);
-                        exit(1);
-                    }
-                }
-
-                if (!bg){ 
-                    int status;
-                    Waitpid(pid, &status, 0);
-                }
-                else { //when there is backgrount process!
-                    printf("%d %s", pid, cmdline);
-
+                if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
+                    printf("%s: Command not found.\n", argv[0]);
+                    exit(1);
                 }
             }
-            else if(builtin_condition == 2){
-                builtin_condition = history_command(argv[0], cmdline);
+
+            if (!bg){ 
+                int status;
+                Waitpid(pid, &status, 0);
+            }
+            else { //when there is backgrount process!
+                printf("%d %s", pid, cmdline);
             }
         }
+        else if(builtin_condition == 2){
+            builtin_condition = history_command(argv[0], cmdline);
+        }
+
     } while (builtin_condition == 2);
 
 	/* Parent waits for foreground job to terminate */
