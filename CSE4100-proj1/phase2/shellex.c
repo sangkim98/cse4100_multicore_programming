@@ -12,8 +12,6 @@ int getexecpath(char* path_name, char* exec_name);
 int token_pipe_command(char** piped_commands, char* cmdline);
 int run_pipe(char** piped_commands, const int num_piped_commands);
 void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command);
-void run_child1(int *fd, char* cmdline);
-void run_child2(int *fd, char* cmdline);
 
 int main() 
 {
