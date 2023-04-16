@@ -56,7 +56,8 @@ void eval(char *cmdline)
         save_shell_history();
         if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
             if ((pid = Fork()) == 0){
-                getexecpath(name, argv[0]);
+                if(!getexecpath(name, argv[0]))
+                    strcpy(name, argv[0]);
 
                 if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
                     printf("%s: Command not found.\n", argv[0]);
