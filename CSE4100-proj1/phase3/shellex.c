@@ -10,8 +10,10 @@ int builtin_command(char **argv);
 int getexecpath(char* path_name, char* exec_name);
 /* Redirection and Pipe Implementation */
 int token_pipe_command(char** piped_commands, char* cmdline);
-int run_pipe(char** piped_commands, const int num_piped_commands);
-void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command);
+int run_pipe(char** piped_commands, const int num_piped_commands, int bg);
+void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command, int bg);
+
+job_info* jobs;
 
 int main() 
 {
@@ -19,6 +21,7 @@ int main()
     char cmdline[MAXLINE]; /* Command line */
 
     set_shell_history_location();
+    jobs = initJobs();
 
     while (1) {
 	/* Read */
@@ -65,11 +68,7 @@ void eval(char *cmdline)
 
         if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
             if ((pid = Fork()) == 0){
-                Setpgid(0, 0);
-
-                if(bg){
-
-                }
+                if(bg) Setpgid(0, 0);
 
                 if(strpbrk(cmdline, "|") != NULL){
 
@@ -80,7 +79,7 @@ void eval(char *cmdline)
                         exit(1);
                     }
 
-                    run_pipe(piped_commands, num_piped_commands);
+                    run_pipe(piped_commands, num_piped_commands, bg);
 
                     exit(0);
                 }
@@ -88,19 +87,20 @@ void eval(char *cmdline)
                     if(!getexecpath(name, argv[0]))
                         strcpy(name, argv[0]);
 
+                    addJob(jobs, pid, cmdline);
+
                     if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
                         printf("%s: Command not found.\n", argv[0]);
                         exit(1);
                     }
                 }
             }
-
             if (!bg){ 
                 int status;
                 Waitpid(pid, &status, 0);
             }
             else { //when there is backgrount process!
-                printf("%d %s", pid, cmdline);
+                
             }
         }
         else if(builtin_condition == 2){
@@ -141,6 +141,19 @@ int builtin_command(char **argv)
     }
     if (argv[0][0] == '!'){
         return 2;
+    }
+    if (!strcmp(argv[0], "jobs")){
+        printAllJobs(jobs);
+        return 1;
+    }
+    if (!strcmp(argv[0], "kill")){
+
+    }
+    if (!strcmp(argv[0], "bg")){
+
+    }
+    if (!strcmp(argv[0], "fg")){
+
     }
 
     return 0;                        /* Not a builtin command */
@@ -231,7 +244,7 @@ int token_pipe_command(char** piped_commands, char* cmdline){
     return pipe_idx;
 }
 
-int run_pipe(char** piped_commands, const int num_piped_commands){
+int run_pipe(char** piped_commands, const int num_piped_commands, int bg){
     int fd[2 * (num_piped_commands-1)];
     int status;
     pid_t pid;
@@ -240,7 +253,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands){
         pipe(fd+i);
 
     for(int idx = 0; idx < num_piped_commands; idx++){
-        run_child(fd, piped_commands[idx], idx, num_piped_commands);
+        run_child(fd, piped_commands[idx], idx, num_piped_commands, bg);
     }
 
     for(int i = 0; i < 2 * (num_piped_commands-1); i++){
@@ -250,7 +263,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands){
     while((pid = wait(&status)) > 0);
 }
 
-void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands){
+void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands, int bg){
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
     char name[MAXLINE];    /* Holds name of program */

@@ -29,6 +29,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define JOB_SUSPENDED 0
+#define JOB_RUNNING   1
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 /* $begin createmasks */
 #define DEF_MODE   S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
@@ -72,6 +74,23 @@ extern char **environ; /* Defined by libc */
 #define LISTENQ  1024  /* Second argument to listen() */
 #define SHELL_HIST_FNAME "/.shell_history"
 #define MAXPIPES 50
+
+/* Structs for jobs */
+/* $begin job structs */
+typedef struct _job{
+    int job_id;
+    pid_t pid;
+    int state;
+    char cmd[MAXLINE];
+    struct _job* next;
+} job;
+
+/* $begin job info */
+typedef struct _job_info{
+    job* head;
+    job* tail;
+    int num_jobs;
+} job_info;
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -221,6 +240,11 @@ void remove_command_from_history(char *cmd);
 int history_command(char* extension, char* cmdline);
 void history(void);
 int digits_only(char* arg);
+
+/* Job implementation */
+job_info* initJobs(void);
+void addJob(job_info* info, pid_t pid, char* cmdline);
+void printAllJobs(job_info* info);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */
