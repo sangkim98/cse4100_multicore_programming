@@ -232,7 +232,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands){
         close(fd[i]);
     }
 
-    while(wait(&status) != -1);
+    while((pid = wait(&status)) > 0);
 }
 
 void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands){
