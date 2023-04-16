@@ -67,6 +67,10 @@ void eval(char *cmdline)
             if ((pid = Fork()) == 0){
                 Setpgid(0, 0);
 
+                if(bg){
+
+                }
+
                 if(strpbrk(cmdline, "|") != NULL){
 
                     strcpy(pipe_buf, cmdline);
@@ -81,7 +85,8 @@ void eval(char *cmdline)
                     exit(0);
                 }
                 else{
-                    getexecpath(name, argv[0]);
+                    if(!getexecpath(name, argv[0]))
+                        strcpy(name, argv[0]);
 
                     if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
                         printf("%s: Command not found.\n", argv[0]);
@@ -256,7 +261,8 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
     parseline(buf, argv);
 
     if((pid = Fork()) == 0){
-        getexecpath(name, argv[0]);
+        if(!getexecpath(name, argv[0]))
+            strcpy(name, argv[0]);
 
         if(idx != 0){
             Dup2(fd[idx*2 - 2], STDIN_FILENO);
