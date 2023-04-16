@@ -64,24 +64,29 @@ void eval(char *cmdline)
         save_shell_history();
 
         if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
-            if(strpbrk(cmdline, "|") != NULL){
-                strcpy(pipe_buf, cmdline);
+            if ((pid = Fork()) == 0){
+                Setpgid(0, 0);
 
-                if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
-                    printf("pipe error\n");
-                    return;
+                if(strpbrk(cmdline, "|") != NULL){
+
+                    strcpy(pipe_buf, cmdline);
+
+                    if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
+                        printf("pipe error\n");
+                        exit(1);
+                    }
+
+                    run_pipe(piped_commands, num_piped_commands);
+
+                    exit(0);
                 }
+                else{
+                    getexecpath(name, argv[0]);
 
-                run_pipe(piped_commands, num_piped_commands);
-
-                return;
-            }
-            else if ((pid = Fork()) == 0){
-                getexecpath(name, argv[0]);
-
-                if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
-                    printf("%s: Command not found.\n", argv[0]);
-                    exit(1);
+                    if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
+                        printf("%s: Command not found.\n", argv[0]);
+                        exit(1);
+                    }
                 }
             }
 
@@ -151,6 +156,13 @@ int parseline(char *buf, char **argv)
         buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* Ignore leading spaces */
 	    buf++;
+    
+    temp = buf+strlen(buf)-1;
+    while (*temp == ' '){
+        temp--;
+    }
+    if(bg = (*temp == '&'))
+        *temp = ' ';
 
     condition = 0;
 
@@ -183,8 +195,6 @@ int parseline(char *buf, char **argv)
 	    return 1;
 
     /* Should the job run in the background? */
-    if ((bg = (*argv[argc-1] == '&')) != 0)
-	    argv[--argc] = NULL;
 
     return bg;
 }
@@ -232,7 +242,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands){
         close(fd[i]);
     }
 
-    while(wait(&status) != -1);
+    while((pid = wait(&status)) > 0);
 }
 
 void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands){
