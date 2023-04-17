@@ -4,7 +4,7 @@
 #define MAXARGS   128
 
 /* Function prototypes */
-void eval(char *cmdline);
+int eval(char *cmdline);
 int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
 int getexecpath(char* path_name, char* exec_name);
@@ -13,15 +13,17 @@ int token_pipe_command(char** piped_commands, char* cmdline);
 int run_pipe(char** piped_commands, const int num_piped_commands, int bg);
 void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command, int bg);
 
-job_info* jobs;
 
-int main() 
+
+job jobs[MAXPROCESSES];
+
+int main()
 {
-    int save_history_counter = 0; 
+    int is_hist;
     char cmdline[MAXLINE]; /* Command line */
 
     set_shell_history_location();
-    jobs = initJobs();
+    initJobs(jobs);
 
     while (1) {
 	/* Read */
@@ -30,9 +32,7 @@ int main()
         if (feof(stdin))
             exit(0);
         /* Evaluate */
-        eval(cmdline);
-
-        save_history_counter++;
+        while(is_hist = eval(cmdline));
     }
 
     return 0;
@@ -41,7 +41,7 @@ int main()
   
 /* $begin eval */
 /* eval - Evaluate a command line */
-void eval(char *cmdline) 
+int eval(char *cmdline) 
 {
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
@@ -56,66 +56,61 @@ void eval(char *cmdline)
     
     builtin_condition = 0;
 
-    do{
-        strcpy(buf, cmdline);
-        bg = parseline(buf, argv);
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
 
-        if (argv[0] == NULL)  
-            return;   /* Ignore empty lines */
-        open_shell_history();
-        add_command_to_history(cmdline);
-        save_shell_history();
+    if (argv[0] == NULL)  
+        return 0;   /* Ignore empty lines */
+    
+    open_shell_history();
+    add_command_to_history(cmdline);
+    save_shell_history();
 
-        if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+    if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+        if(strpbrk(cmdline, "|") != NULL){
+            strcpy(pipe_buf, cmdline);
+
+            if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
+                printf("pipe error\n");
+                exit(1);
+            }
+
+            run_pipe(piped_commands, num_piped_commands, bg);
+
+        }
+        else{
             if ((pid = Fork()) == 0){
-                if(bg) Setpgid(0, 0);
+                
 
-                if(strpbrk(cmdline, "|") != NULL){
+                if(!getexecpath(name, argv[0]))
+                    strcpy(name, argv[0]);
 
-                    strcpy(pipe_buf, cmdline);
-
-                    if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
-                        printf("pipe error\n");
-                        exit(1);
-                    }
-
-                    run_pipe(piped_commands, num_piped_commands, bg);
-
-                    exit(0);
-                }
-                else{
-                    if(!getexecpath(name, argv[0]))
-                        strcpy(name, argv[0]);
-
-                    addJob(jobs, pid, cmdline);
-
-                    if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
-                        printf("%s: Command not found.\n", argv[0]);
-                        exit(1);
-                    }
+                if (execve(name, argv, environ) < 0) {	//ex) /bin/ls ls -al &
+                    printf("%s: Command not found.\n", argv[0]);
+                    exit(1);
                 }
             }
             if (!bg){ 
                 int status;
                 Waitpid(pid, &status, 0);
             }
-            else { //when there is backgrount process!
-                
+            else{
+                addJob(jobs, pid, cmdline);
             }
         }
-        else if(builtin_condition == 2){
-            builtin_condition = history_command(argv[0], cmdline);
-        }
-
-    } while (builtin_condition == 2);
+    }
+    else if(builtin_condition == 2){
+        history_command(argv[0], cmdline);
+        return 1;
+    }
 
 	/* Parent waits for foreground job to terminate */
 
-    return;
+    return 0;
 }
 
 /* If first arg is a builtin command, run it and return true */
-int builtin_command(char **argv) 
+int builtin_command(char **argv)
 {
     if (!strcmp(argv[0], "quit"))    /* quit command */
         exit(0);
@@ -147,16 +142,16 @@ int builtin_command(char **argv)
         return 1;
     }
     if (!strcmp(argv[0], "kill")){
-
+        killJob(jobs, atoi(argv[1]));
     }
     if (!strcmp(argv[0], "bg")){
-
+        bg(jobs, atoi(argv[1]));
     }
     if (!strcmp(argv[0], "fg")){
-
+        fg(jobs, atoi(argv[1]));
     }
 
-    return 0;                        /* Not a builtin command */
+    return 0;
 }
 /* $end eval */
 
@@ -260,7 +255,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands, int bg){
         close(fd[i]);
     }
 
-    while((pid = wait(&status)) > 0);
+    if(!bg) while((pid = wait(&status)) > 0);
 }
 
 void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands, int bg){
@@ -292,7 +287,10 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
             printf("%s: Command not found.\n", argv[0]);
             exit(1);
         }
-    }  
+    }
+    else if(bg){
+        addJob(jobs, pid, buf);
+    }
 }
 
 int getexecpath(char* path_name, char* exec_name){

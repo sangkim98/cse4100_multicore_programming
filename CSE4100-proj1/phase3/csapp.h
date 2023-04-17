@@ -73,24 +73,17 @@ extern char **environ; /* Defined by libc */
 #define MAXBUF   8192  /* Max I/O buffer size */
 #define LISTENQ  1024  /* Second argument to listen() */
 #define SHELL_HIST_FNAME "/.shell_history"
+#define SHELL_NAME "myshell"
 #define MAXPIPES 50
+#define MAXPROCESSES 256
 
 /* Structs for jobs */
 /* $begin job structs */
 typedef struct _job{
-    int job_id;
     pid_t pid;
     int state;
-    char cmd[MAXLINE];
-    struct _job* next;
+    char *cmd;
 } job;
-
-/* $begin job info */
-typedef struct _job_info{
-    job* head;
-    job* tail;
-    int num_jobs;
-} job_info;
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -242,9 +235,12 @@ void history(void);
 int digits_only(char* arg);
 
 /* Job implementation */
-job_info* initJobs(void);
-void addJob(job_info* info, pid_t pid, char* cmdline);
-void printAllJobs(job_info* info);
+void initJobs(job* jobs);
+void addJob(job* jobs, pid_t pid, const char* cmdline);
+void printAllJobs(job* jobs);
+void killJob(job* jobs, int jobID);
+void bg(job* jobs, int jobID);
+void fg(job* jobs, int jobID);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */

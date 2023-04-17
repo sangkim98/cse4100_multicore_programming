@@ -1237,130 +1237,76 @@ int digits_only(char* arg){
 /************************************************
  * Job functions
  ************************************************/
-job_info* initJobs(void){
-    job_info* info;
-    
-    info = (job_info*)malloc(sizeof(job_info));
+void initJobs(job* jobs){
+    int cmd_len;
 
-    info->head = NULL;
-    info->tail = NULL;
-    info->num_jobs = 0;
+    cmd_len = strlen(SHELL_NAME)+1;
 
-    return info;
+    jobs[0].cmd = (char*)malloc(sizeof(char) * cmd_len);
+
+    jobs[0].pid = 0;
+    jobs[0].state = 0;
+    strcpy(jobs[0].cmd, SHELL_NAME);
 }
 
-void addJob(job_info* info, pid_t pid, char* cmdline){
-    int line_len;
-    job *new_job, *temp;
+void addJob(job* jobs, pid_t pid, const char* cmdline){
+    int new_jobID, cmd_len;
 
-    line_len = strlen(cmdline)+1;
-    info->num_jobs++;
-    
-    new_job = (job*)malloc(sizeof(job));
-    strcpy(new_job->cmd, cmdline);
-    new_job->pid = pid;
-    new_job->job_id = info->num_jobs;
-    new_job->state = JOB_RUNNING;
-    new_job->next = NULL;
+    new_jobID = ++(jobs[0].state);
+    cmd_len = strlen(cmdline)+1;
 
-    if(info->head == NULL){
-        info->head = new_job;
-        info->tail = new_job;
-    }
+    jobs[new_jobID].cmd = (char*)malloc(sizeof(char) * cmd_len);
 
-    info->tail->next = new_job;
-    info->tail = new_job;
+    strcpy(jobs[new_jobID].cmd, cmdline);
+    jobs[new_jobID].pid = pid;
+    jobs[new_jobID].state = JOB_RUNNING;
 }
 
-void printAllJobs(job_info* info){
-    job* job_ptr;
+void printAllJobs(job* jobs){
+    int num_jobs_created;
     char *jobStates[] = {"suspended", "running"};
 
-    job_ptr = info->head;
-
-    while(job_ptr != NULL){
-        printf("[%d] %s %s", job_ptr->job_id, jobStates[job_ptr->state], job_ptr->cmd);
+    num_jobs_created = jobs[0].state;
+    for(int i = 1; i <= num_jobs_created; i++){
+        if(jobs[i].cmd != NULL)
+            printf("[%d]  %s %s\n", i, jobStates[jobs[i].state], jobs[i].cmd);
     }
 }
 
-void deleteJob(job_info* info, job* prev_job, job* job_to_delete){
-
-    if(prev_job != NULL){
-        prev_job->next = job_to_delete->next;
+void deleteJob(job* jobs, int jobID){
+    if(jobs[jobID].cmd != NULL){
+        free(jobs[jobID].cmd);
+        jobs[jobID].cmd = NULL;
     }
-    if(info->head == job_to_delete){
-        info->head == job_to_delete->next;
-    }
-    if(info->tail == job_to_delete){
-        info->tail == prev_job;
-    }
-
-    free(job_to_delete);
-
-    info->num_jobs--;
 }
 
-void killJob(job_info* info, int job_id){
-    job *curr_job, *prev_job;
-
-    prev_job = NULL;
-    curr_job = info->head;
-
-    while(curr_job != NULL){
-        if(curr_job->job_id == job_id)
-            break;
-        prev_job = curr_job;
-        curr_job = curr_job->next;
-    }
-
-    if(curr_job == NULL){
+void killJob(job* jobs, int jobID){
+    if(jobs[jobID].cmd == NULL){
         printf("No Such Job\n");
     }
     else{
-        Kill(-(curr_job->pid), SIGINT);
-        deleteJob(info, prev_job, curr_job);
+        Kill(jobs[jobID].pid, SIGKILL);
+        deleteJob(jobs, jobID);
     }
 }
 
-void bg(job_info* info, int job_id){
-    job *curr_job, *prev_job;
-
-    prev_job = NULL;
-    curr_job = info->head;
-
-    while(curr_job != NULL){
-        if(curr_job->job_id == job_id)
-            break;
-        prev_job = curr_job;
-        curr_job = curr_job->next;
-    }
-
-    if(curr_job == NULL){
+void bg(job* jobs, int jobID){
+    if(jobs[jobID].cmd == NULL){
         printf("No Such Job\n");
     }
     else{
-        deleteJob(info, prev_job, curr_job);
+        Kill(jobs[jobID].pid, SIGKILL);
+        deleteJob(jobs, jobID);
     }
 }
 
-void fg(job_info* info, int job_id){
-    job *curr_job, *prev_job;
-
-    prev_job = NULL;
-    curr_job = info->head;
-
-    while(curr_job != NULL){
-        if(curr_job->job_id == job_id)
-            break;
-        prev_job = curr_job;
-        curr_job = curr_job->next;
-    }
-
-    if(curr_job == NULL){
+void fg(job* jobs, int jobID){
+    if(jobs[jobID].cmd == NULL){
         printf("No Such Job\n");
     }
     else{
-        deleteJob(info, prev_job, curr_job);
+        Kill(jobs[jobID].pid, SIGKILL);
+        deleteJob(jobs, jobID);
     }
 }
 
