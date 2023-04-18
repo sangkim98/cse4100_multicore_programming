@@ -1,45 +1,35 @@
 /* $begin shellmain */
 #include "csapp.h"
 #include<errno.h>
+#define MAXARGS   128
 
 /* Function prototypes */
-int eval(char *cmdline);
+void eval(char *cmdline);
 int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
 int getexecpath(char* path_name, char* exec_name);
 /* Redirection and Pipe Implementation */
 int token_pipe_command(char** piped_commands, char* cmdline);
-int run_pipe(char** piped_commands, const int num_piped_commands, int bg, sigset_t* prev_addr);
-void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command, int bg);
+int run_pipe(char** piped_commands, const int num_piped_commands);
+void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command);
 
-void sigint_handler(int sig);
-void sigtstp_handler(int sig);
-void sigtstp_handler1(int sig);
-void sigchld_handler(int sig);
-
-volatile job jobs[MAXPROCESSES];
-volatile sig_atomic_t sig_pid;
-
-int main()
+int main() 
 {
-    int is_hist;
+    int save_history_counter = 0; 
     char cmdline[MAXLINE]; /* Command line */
 
     set_shell_history_location();
-    initJobs(jobs);
 
     while (1) {
 	/* Read */
-        Signal(SIGINT, sigint_handler);
-        Signal(SIGTSTP, sigtstp_handler1);
-
-        printf("CSE4100-MP-P1> ");
-        fflush(stdout);
+        printf("CSE4100-MP-P1> ");                   
         fgets(cmdline, MAXLINE, stdin); 
         if (feof(stdin))
             exit(0);
         /* Evaluate */
-        while(is_hist = eval(cmdline));
+        eval(cmdline);
+
+        save_history_counter++;
     }
 
     return 0;
@@ -48,7 +38,7 @@ int main()
   
 /* $begin eval */
 /* eval - Evaluate a command line */
-int eval(char *cmdline) 
+void eval(char *cmdline) 
 {
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
@@ -58,47 +48,35 @@ int eval(char *cmdline)
     int builtin_condition; /*  */
     char *piped_commands[MAXPIPES+1];
     int num_piped_commands;
+
     pid_t pid;             /* Process id */
-    sigset_t mask, prev;
-
-    Sigemptyset(&mask);
-    Sigaddset(&mask, SIGCHLD);
-
-    Signal(SIGCHLD, sigchld_handler);
-
+    
     builtin_condition = 0;
 
-    strcpy(buf, cmdline);
-    bg = parseline(buf, argv);
+    do{
+        strcpy(buf, cmdline);
+        bg = parseline(buf, argv);
 
-    if (argv[0] == NULL)  
-        return 0;   /* Ignore empty lines */
-    
-    open_shell_history();
-    add_command_to_history(cmdline);
-    save_shell_history();
+        if (argv[0] == NULL)  
+            return;   /* Ignore empty lines */
+        open_shell_history();
+        add_command_to_history(cmdline);
+        save_shell_history();
 
-    if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
-        Sigprocmask(SIG_BLOCK, &mask, &prev);
-        Signal(SIGTSTP, SIG_IGN);
+        if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+            if(strpbrk(cmdline, "|") != NULL){
+                strcpy(pipe_buf, cmdline);
 
-        if(strpbrk(cmdline, "|") != NULL){
+                if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
+                    printf("pipe error\n");
+                    return;
+                }
 
-            strcpy(pipe_buf, cmdline);
+                run_pipe(piped_commands, num_piped_commands);
 
-            if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
-                printf("pipe error\n");
-                exit(1);
+                return;
             }
-
-            run_pipe(piped_commands, num_piped_commands, bg, &prev);
-
-        }
-        else{
-            if ((pid = Fork()) == 0){
-                Signal(SIGINT, SIG_DFL);
-                Signal(SIGTSTP, SIG_DFL);
-
+            else if ((pid = Fork()) == 0){
                 if(!getexecpath(name, argv[0]))
                     strcpy(name, argv[0]);
 
@@ -107,31 +85,28 @@ int eval(char *cmdline)
                     exit(1);
                 }
             }
-            sig_pid = 0;
-            if (!bg){
-                while(!sig_pid){
-                    Sigsuspend(&prev);
-                }
+
+            if (!bg){ 
+                int status;
+                Waitpid(pid, &status, 0);
             }
-            else{
-                addJob(jobs, pid, JOB_RUNNING, cmdline);
+            else { //when there is backgrount process!
+                printf("%d %s", pid, cmdline);
             }
         }
-        Sigprocmask(SIG_SETMASK, &prev, NULL);
-        signal(SIGINT, SIG_IGN);
-    }
-    else if(builtin_condition == 2){
-        history_command(argv[0], cmdline);
-        return 1;
-    }
+        else if(builtin_condition == 2){
+            builtin_condition = history_command(argv[0], cmdline);
+        }
+
+    } while (builtin_condition == 2);
 
 	/* Parent waits for foreground job to terminate */
 
-    return 0;
+    return;
 }
 
 /* If first arg is a builtin command, run it and return true */
-int builtin_command(char **argv)
+int builtin_command(char **argv) 
 {
     if (!strcmp(argv[0], "quit"))    /* quit command */
         exit(0);
@@ -158,24 +133,8 @@ int builtin_command(char **argv)
     if (argv[0][0] == '!'){
         return 2;
     }
-    if (!strcmp(argv[0], "jobs")){
-        printAllJobs(jobs);
-        return 1;
-    }
-    if (!strcmp(argv[0], "kill")){
-        killJob(jobs, argv);
-        return 1;
-    }
-    if (!strcmp(argv[0], "bg")){
-        bg(jobs, argv);
-        return 1;
-    }
-    if (!strcmp(argv[0], "fg")){
-        fg(jobs, argv);
-        return 1;
-    }
 
-    return 0;
+    return 0;                        /* Not a builtin command */
 }
 /* $end eval */
 
@@ -193,13 +152,6 @@ int parseline(char *buf, char **argv)
         buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* Ignore leading spaces */
 	    buf++;
-    
-    temp = buf+strlen(buf)-1;
-    while (*temp == ' '){
-        temp--;
-    }
-    if(bg = (*temp == '&'))
-        *temp = ' ';
 
     condition = 0;
 
@@ -232,6 +184,8 @@ int parseline(char *buf, char **argv)
 	    return 1;
 
     /* Should the job run in the background? */
+    if ((bg = (*argv[argc-1] == '&')) != 0)
+	    argv[--argc] = NULL;
 
     return bg;
 }
@@ -263,28 +217,26 @@ int token_pipe_command(char** piped_commands, char* cmdline){
     return pipe_idx;
 }
 
-int run_pipe(char** piped_commands, const int num_piped_commands, int bg, sigset_t *prev_addr){
+int run_pipe(char** piped_commands, const int num_piped_commands){
     int fd[2 * (num_piped_commands-1)];
     int status;
+    pid_t pid;
 
     for(int i = 0; i < 2 * (num_piped_commands-1); i+=2)
         pipe(fd+i);
 
     for(int idx = 0; idx < num_piped_commands; idx++){
-        run_child(fd, piped_commands[idx], idx, num_piped_commands, bg);
+        run_child(fd, piped_commands[idx], idx, num_piped_commands);
     }
 
     for(int i = 0; i < 2 * (num_piped_commands-1); i++){
         close(fd[i]);
     }
-    sig_pid = 0;
-    if(!bg){
-        while(!sig_pid)
-            Sigsuspend(prev_addr);
-    }
+
+    while((pid = wait(&status)) > 0);
 }
 
-void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands, int bg){
+void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands){
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
     char name[MAXLINE];    /* Holds name of program */
@@ -295,9 +247,6 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
     parseline(buf, argv);
 
     if((pid = Fork()) == 0){
-        Signal(SIGINT, SIG_DFL);
-        Signal(SIGTSTP, SIG_DFL);
-
         if(!getexecpath(name, argv[0]))
             strcpy(name, argv[0]);
 
@@ -316,10 +265,7 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
             printf("%s: Command not found.\n", argv[0]);
             exit(1);
         }
-    }
-    if(bg){
-        addJob(jobs, pid, JOB_RUNNING, cmdline);
-    }
+    }  
 }
 
 int getexecpath(char* path_name, char* exec_name){
@@ -327,6 +273,7 @@ int getexecpath(char* path_name, char* exec_name){
     char *token_ptr;
 
     const char *temp = getenv("PATH");
+
 
     strcpy(path_name, exec_name);
 
@@ -362,65 +309,4 @@ int getexecpath(char* path_name, char* exec_name){
         return 0;
 
     return 1;
-}
-
-void sigchld_handler(int sig){
-    int status;
-    int jobID;
-    int en = errno;
-
-	while ((sig_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
-		if (WIFEXITED(status) || WIFSIGNALED(status)) {	
-			if (WTERMSIG(status) == SIGINT)
-				Sio_puts("\n");
-			if (jobID = findJobID(jobs, sig_pid)) {
-				if (jobs[jobID].state == JOB_RUNNING)
-					continue;
-			}
-			deleteJob(jobs, jobID);
-			break;
-		}
-		if (WIFSTOPPED(status)) {
-			Sio_puts("\n");
-			if ((jobID = findJobID(jobs, sig_pid))) {
-				jobs[jobID].state = JOB_SUSPENDED;
-			}
-			else {
-				addJob(jobs, sig_pid, JOB_SUSPENDED, "");
-			}
-			break;
-		}
-	}
-
-	errno = en;
-
-    return;
-}
-
-void sigint_handler(int sig){
-    Sio_puts("\n");
-
-    return;
-}
-
-void sigtstp_handler(int sig){
-    int num_processes_created;
-
-    num_processes_created = jobs[0].state;
-
-    for(int i = 0; i <= num_processes_created; i++){
-        if(jobs[i].state == JOB_RUNNING){
-            jobs[i].state = JOB_SUSPENDED;
-            kill(-jobs[i].pid, SIGSTOP);
-            jobs[0].state++;
-            return;
-        }
-    }
-}
-
-void sigtstp_handler1(int sig){
-    Sio_puts("\r                 \r");
-    Sio_puts("CSE4100-MP-P1> ");
-
-    return;
 }

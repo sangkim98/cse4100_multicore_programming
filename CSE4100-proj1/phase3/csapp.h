@@ -87,9 +87,11 @@ extern char **environ; /* Defined by libc */
 /* $begin job structs */
 typedef struct _job{
     pid_t pid;
-    int state;
+    volatile int state;
     char cmd[MAXLINE];
 } job;
+
+int num_jobs;
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -245,10 +247,11 @@ void initJobs(job* jobs);
 void addJob(job* jobs, pid_t pid, int state, const char* cmdline);
 void printAllJobs(job* jobs);
 int findJobID(job* jobs, pid_t pid);
-void deleteJob(job* jobs, int jobID);
-void killJob(job* jobs, char** argv);
-void bg(job* jobs, char** argv);
-void fg(job* jobs, char** argv);
+void deleteJob(job* jobs, int pid);
+void deleteForeGroundJob(job* jobs, int jobID);
+void killJob(job* jobs, int jobID);
+void bg(job* jobs, int jobID);
+void fg(job* jobs, int jobID);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */

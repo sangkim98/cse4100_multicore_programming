@@ -18,7 +18,7 @@
 /* $begin csapp.c */
 #include "csapp.h"
 
-char *jobStates[] = {"", "suspended", "running"};
+char *jobStates[] = {"", "suspended", "running", "", "", "running"};
 
 /************************** 
  * Error-handling functions
@@ -1239,142 +1239,102 @@ int digits_only(char* arg){
 /************************************************
  * Job functions
  ************************************************/
-void initJobs(job* jobs){
-    jobs[0].pid = 0;
-    jobs[0].state = 0;
-    strcpy(jobs[0].cmd, SHELL_NAME);
-}
 
 void addJob(job* jobs, pid_t pid, int state, const char* cmdline){
     int new_jobID, cmd_len;
     
-    ++(jobs[0].state);
-    printf("num jobs: %d\n", jobs[0].state);
+    ++num_jobs;
 
-    new_jobID = jobs[0].state;
+    new_jobID = num_jobs;
 
     strcpy(jobs[new_jobID].cmd, cmdline);
     jobs[new_jobID].pid = pid;
     jobs[new_jobID].state = state;
-
-    sio_puts("PID : ");
-    sio_putl(pid);
-    sio_puts("\n");
 }
 
 void printAllJobs(job* jobs){
-    int num_jobs_created;
-
-    num_jobs_created = jobs[0].state;
-    for(int i = 1; i <= num_jobs_created; i++){
-        if(jobs[i].state != JOB_DEFAULT)
-            printf("[%d]  %s %s\n", i, jobStates[jobs[i].state], jobs[i].cmd);
+    for(int i = 1; i <= num_jobs; i++){
+        if((jobs[i].state != JOB_DEFAULT) && (jobs[i].state != JOB_DONE))
+            printf("[%d]  %s %s", i, jobStates[jobs[i].state], jobs[i].cmd);
     }
 }
 
 int findJobID(job* jobs, pid_t pid){
-    int num_jobs_created;
-
-    num_jobs_created = jobs[0].state;
-
-    for(int i = 1; i <= num_jobs_created; i++){
-        if(jobs[i].pid == pid)
+    for(int i = 1; i <= MAXPROCESSES+1; i++){
+        if(jobs[i].pid == pid && jobs[i].state != JOB_DEFAULT && jobs[i].state != JOB_DONE)
             return i;
     }
 
     return 0;
 }
 
-void deleteJob(job* jobs, int jobID){
-    if(jobs[jobID].cmd != NULL){
-        jobs[jobID].cmd[0] = '\0';
-        jobs[jobID].state = JOB_DONE;
-    }
+void deleteForeGroundJob(job* jobs, int jobID){
+    num_jobs -= 1;
+    jobs[jobID].state = JOB_DEFAULT;
 }
 
-void killJob(job* jobs, char** argv){
-    if(jobs[jobID].cmd == NULL){
+void deleteJob(job* jobs, int jobID){
+    jobs[jobID].state = JOB_DONE;
+}
+
+void killJob(job* jobs, int jobID){
+    if(jobID == 0){
         printf("No Such Job\n");
     }
     else{
-        Kill(jobs[jobID].pid, SIGKILL);
         deleteJob(jobs, jobID);
+        Kill(jobs[jobID].pid, SIGKILL);
     }
 }
 
-void bg(job* jobs, char** argv){
-    int jobnum;
+void bg(job* jobs, int jobID){
     pid_t pid;
 
-    if (argv[1] && argv[1][0] == '%') {	// check input with jobs number
-        jobnum = atoi(argv[1]+1);	// store job number
-
-        if (jobs[jobnum].cmd[0] = '\0') {
-            printf("No such job\n");
-            
-            return 1;
-        }
-        int pid = jobs[jobnum].pid;	// get pid
-
-        jobs[jobnum].state = JOB_RUNNING;	// change status to running
-
-        if (kill(pid, SIGCONT) < 0) {	// send SIGCONT
-            unix_error("kill error");
-        }
+    if(jobID == 0){
+        printf("No such job\n");
+        return;
     }
+
+    if (jobs[jobID].state != JOB_SUSPENDED) {
+        printf("Job not suspended\n");
+        return;
+    }
+    pid = jobs[jobID].pid;
+
+    jobs[jobID].state = JOB_RUNNING;
+
+    if (kill(pid, SIGCONT) < 0) {
+        unix_error("kill error");
+    }
+    printf("[%d]  %s %s\n", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
 }
 
-void fg(job* jobs, char** argv){
-    if (argv[1] && argv[1][0] == '%') {	// check input with jobs number
-        int jobnum = atoi(argv[1] + 1) - 1;	// store job number
+void fg(job* jobs, int jobID){
+    pid_t pid;
 
-        if (!jobs[jobnum]) {	// if there is no job with the job number
-            printf("No such job\n");
-            
-            return 1;
-        }
-        sigset_t mask;
-        int pid = jobs[jobnum]->pid;	// get pid
-        strcpy(cmdline, jobs[jobnum]->command);
-        struct termios stdinorg, stdinnew;
-        struct termios stdoutorg, stdoutnew;
-        Signal(SIGTTOU, SIG_IGN);	// ignore signals
-        Signal(SIGTTIN, SIG_IGN);
-        Signal(SIGTSTP, SIG_IGN);
-        Signal(SIGINT, SIG_IGN);
-
-        if (jobs[jobnum]->state == STOPPED)	// if jobs is stopped
-            kill(pid, SIGCONT);		// send SIGCONT
-
-        change_status(jobnum, FOREGROUND);
-
-        tcgetattr(fileno(stdin), &stdinorg);	// get terminal attr
-        tcgetattr(fileno(stdout), &stdoutorg);	// get terminal attr
-
-        stdinnew = stdinorg;
-        stdoutnew = stdoutorg;
-
-        tcsetattr(fileno(stdout), TCSADRAIN, &stdoutnew);	// set terminal attr
-        tcsetattr(fileno(stdin), TCSADRAIN, &stdinnew);	// set terminal attr
-
-        tcsetpgrp(fileno(stdout), getpgid(getpid()));	// change terminal controlling process
-        tcsetpgrp(fileno(stdin), getpgid(getpid()));	// change terminal controlling process
-        if (kill (pid, SIGCONT) < 0){	// send SIGCONT
-            unix_error("kill error");
-        }
-        //kill sigcont all
-
-        sig_pid = 0;
-        while(!sig_pid)	// wait for sigchild signal
-            Sigsuspend(&mask);	// sleep
-
-        Signal(SIGTTOU, SIG_DFL);
-        Signal(SIGTTIN, SIG_DFL);
-        Signal(SIGTSTP, SIG_DFL);
-        Signal(SIGTSTP, SIG_DFL);
+    if (jobID == 0) {	
+        printf("No such job\n");
+        return;
     }
 
-    return 1;
+    pid = jobs[jobID].pid;	
+
+    Signal(SIGTTOU, SIG_IGN);
+    Signal(SIGTTIN, SIG_IGN);
+    Signal(SIGTSTP, SIG_IGN);
+    Signal(SIGINT, SIG_IGN);
+
+    if (jobs[jobID].state == JOB_SUSPENDED){
+        jobs[jobID].state = JOB_FOREGROUND;
+        kill(pid, SIGCONT);	
+    }
+
+    Signal(SIGTTOU, SIG_DFL);
+    Signal(SIGTTIN, SIG_DFL);
+    Signal(SIGTSTP, SIG_DFL);
+    Signal(SIGTSTP, SIG_DFL);
+
+    printf("[%d]  %s %s\n", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
 }
 
 /* $end csapp.c */

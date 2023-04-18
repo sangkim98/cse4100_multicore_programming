@@ -6,8 +6,8 @@ PROGS = shellex
 
 all: $(PROGS)
 
-shellex: shellex.c csapp.c
-
+shellex: myshell.c csapp.c
+	$(CC) $(CFLAGS) myshell.c csapp.c -lpthread -o shellex
 test: testing.c csapp.c
 	$(CC) $(CFLAGS) testing.c csapp.c -lpthread -o test
 
