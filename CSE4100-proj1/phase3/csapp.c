@@ -18,6 +18,8 @@
 /* $begin csapp.c */
 #include "csapp.h"
 
+char *jobStates[] = {"", "suspended", "running"};
+
 /************************** 
  * Error-handling functions
  **************************/
@@ -1238,49 +1240,59 @@ int digits_only(char* arg){
  * Job functions
  ************************************************/
 void initJobs(job* jobs){
-    int cmd_len;
-
-    cmd_len = strlen(SHELL_NAME)+1;
-
-    jobs[0].cmd = (char*)malloc(sizeof(char) * cmd_len);
-
     jobs[0].pid = 0;
     jobs[0].state = 0;
     strcpy(jobs[0].cmd, SHELL_NAME);
 }
 
-void addJob(job* jobs, pid_t pid, const char* cmdline){
+void addJob(job* jobs, pid_t pid, int state, const char* cmdline){
     int new_jobID, cmd_len;
+    
+    ++(jobs[0].state);
+    printf("num jobs: %d\n", jobs[0].state);
 
-    new_jobID = ++(jobs[0].state);
-    cmd_len = strlen(cmdline)+1;
-
-    jobs[new_jobID].cmd = (char*)malloc(sizeof(char) * cmd_len);
+    new_jobID = jobs[0].state;
 
     strcpy(jobs[new_jobID].cmd, cmdline);
     jobs[new_jobID].pid = pid;
-    jobs[new_jobID].state = JOB_RUNNING;
+    jobs[new_jobID].state = state;
+
+    sio_puts("PID : ");
+    sio_putl(pid);
+    sio_puts("\n");
 }
 
 void printAllJobs(job* jobs){
     int num_jobs_created;
-    char *jobStates[] = {"suspended", "running"};
 
     num_jobs_created = jobs[0].state;
     for(int i = 1; i <= num_jobs_created; i++){
-        if(jobs[i].cmd != NULL)
+        if(jobs[i].state != JOB_DEFAULT)
             printf("[%d]  %s %s\n", i, jobStates[jobs[i].state], jobs[i].cmd);
     }
 }
 
+int findJobID(job* jobs, pid_t pid){
+    int num_jobs_created;
+
+    num_jobs_created = jobs[0].state;
+
+    for(int i = 1; i <= num_jobs_created; i++){
+        if(jobs[i].pid == pid)
+            return i;
+    }
+
+    return 0;
+}
+
 void deleteJob(job* jobs, int jobID){
     if(jobs[jobID].cmd != NULL){
-        free(jobs[jobID].cmd);
-        jobs[jobID].cmd = NULL;
+        jobs[jobID].cmd[0] = '\0';
+        jobs[jobID].state = JOB_DONE;
     }
 }
 
-void killJob(job* jobs, int jobID){
+void killJob(job* jobs, char** argv){
     if(jobs[jobID].cmd == NULL){
         printf("No Such Job\n");
     }
@@ -1290,24 +1302,79 @@ void killJob(job* jobs, int jobID){
     }
 }
 
-void bg(job* jobs, int jobID){
-    if(jobs[jobID].cmd == NULL){
-        printf("No Such Job\n");
-    }
-    else{
-        Kill(jobs[jobID].pid, SIGKILL);
-        deleteJob(jobs, jobID);
+void bg(job* jobs, char** argv){
+    int jobnum;
+    pid_t pid;
+
+    if (argv[1] && argv[1][0] == '%') {	// check input with jobs number
+        jobnum = atoi(argv[1]+1);	// store job number
+
+        if (jobs[jobnum].cmd[0] = '\0') {
+            printf("No such job\n");
+            
+            return 1;
+        }
+        int pid = jobs[jobnum].pid;	// get pid
+
+        jobs[jobnum].state = JOB_RUNNING;	// change status to running
+
+        if (kill(pid, SIGCONT) < 0) {	// send SIGCONT
+            unix_error("kill error");
+        }
     }
 }
 
-void fg(job* jobs, int jobID){
-    if(jobs[jobID].cmd == NULL){
-        printf("No Such Job\n");
+void fg(job* jobs, char** argv){
+    if (argv[1] && argv[1][0] == '%') {	// check input with jobs number
+        int jobnum = atoi(argv[1] + 1) - 1;	// store job number
+
+        if (!jobs[jobnum]) {	// if there is no job with the job number
+            printf("No such job\n");
+            
+            return 1;
+        }
+        sigset_t mask;
+        int pid = jobs[jobnum]->pid;	// get pid
+        strcpy(cmdline, jobs[jobnum]->command);
+        struct termios stdinorg, stdinnew;
+        struct termios stdoutorg, stdoutnew;
+        Signal(SIGTTOU, SIG_IGN);	// ignore signals
+        Signal(SIGTTIN, SIG_IGN);
+        Signal(SIGTSTP, SIG_IGN);
+        Signal(SIGINT, SIG_IGN);
+
+        if (jobs[jobnum]->state == STOPPED)	// if jobs is stopped
+            kill(pid, SIGCONT);		// send SIGCONT
+
+        change_status(jobnum, FOREGROUND);
+
+        tcgetattr(fileno(stdin), &stdinorg);	// get terminal attr
+        tcgetattr(fileno(stdout), &stdoutorg);	// get terminal attr
+
+        stdinnew = stdinorg;
+        stdoutnew = stdoutorg;
+
+        tcsetattr(fileno(stdout), TCSADRAIN, &stdoutnew);	// set terminal attr
+        tcsetattr(fileno(stdin), TCSADRAIN, &stdinnew);	// set terminal attr
+
+        tcsetpgrp(fileno(stdout), getpgid(getpid()));	// change terminal controlling process
+        tcsetpgrp(fileno(stdin), getpgid(getpid()));	// change terminal controlling process
+        if (kill (pid, SIGCONT) < 0){	// send SIGCONT
+            unix_error("kill error");
+        }
+        //kill sigcont all
+
+        sig_pid = 0;
+        while(!sig_pid)	// wait for sigchild signal
+            Sigsuspend(&mask);	// sleep
+
+        Signal(SIGTTOU, SIG_DFL);
+        Signal(SIGTTIN, SIG_DFL);
+        Signal(SIGTSTP, SIG_DFL);
+        Signal(SIGTSTP, SIG_DFL);
     }
-    else{
-        Kill(jobs[jobID].pid, SIGKILL);
-        deleteJob(jobs, jobID);
-    }
+
+    return 1;
 }
 
 /* $end csapp.c */

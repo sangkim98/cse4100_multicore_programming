@@ -1,17 +1,19 @@
 #include "csapp.h"
 
-int main(){
-    pid_t pid;
-
-    if ((pid = Fork()) == 0){
-        Sleep(50);
-        printf("control should not reach here\n");
-        exit(0);
-    }
-
-    Sleep(5);
-    Kill(pid, SIGKILL);
+void sigint_handler(int sig){
+    printf("Caught SIGINT\n");
     exit(0);
+}
+
+int main(){
+    // pid_t pid;
+
+    // if (Signal(SIGINT, sigint_handler) == SIG_ERR){
+    //     unix_error("signal error");
+    // }
+
+    // pause();
+    Sleep(5);
 
     return 0;
 }

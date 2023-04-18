@@ -29,8 +29,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define JOB_SUSPENDED 0
-#define JOB_RUNNING   1
+#define JOB_DEFAULT    0
+#define JOB_SUSPENDED  1
+#define JOB_RUNNING    2
+#define JOB_DONE       3
+#define JOB_KILLED     4
+#define JOB_FOREGROUND 5
+
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 /* $begin createmasks */
 #define DEF_MODE   S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
@@ -75,14 +80,15 @@ extern char **environ; /* Defined by libc */
 #define SHELL_HIST_FNAME "/.shell_history"
 #define SHELL_NAME "myshell"
 #define MAXPIPES 50
-#define MAXPROCESSES 256
+#define MAXPROCESSES 1024
+#define MAXARGS   128
 
 /* Structs for jobs */
 /* $begin job structs */
 typedef struct _job{
     pid_t pid;
     int state;
-    char *cmd;
+    char cmd[MAXLINE];
 } job;
 
 /* Our own error-handling functions */
@@ -236,11 +242,13 @@ int digits_only(char* arg);
 
 /* Job implementation */
 void initJobs(job* jobs);
-void addJob(job* jobs, pid_t pid, const char* cmdline);
+void addJob(job* jobs, pid_t pid, int state, const char* cmdline);
 void printAllJobs(job* jobs);
-void killJob(job* jobs, int jobID);
-void bg(job* jobs, int jobID);
-void fg(job* jobs, int jobID);
+int findJobID(job* jobs, pid_t pid);
+void deleteJob(job* jobs, int jobID);
+void killJob(job* jobs, char** argv);
+void bg(job* jobs, char** argv);
+void fg(job* jobs, char** argv);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */

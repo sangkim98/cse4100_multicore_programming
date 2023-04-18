@@ -1,7 +1,6 @@
 /* $begin shellmain */
 #include "csapp.h"
 #include<errno.h>
-#define MAXARGS   128
 
 /* Function prototypes */
 int eval(char *cmdline);
@@ -10,12 +9,16 @@ int builtin_command(char **argv);
 int getexecpath(char* path_name, char* exec_name);
 /* Redirection and Pipe Implementation */
 int token_pipe_command(char** piped_commands, char* cmdline);
-int run_pipe(char** piped_commands, const int num_piped_commands, int bg);
+int run_pipe(char** piped_commands, const int num_piped_commands, int bg, sigset_t* prev_addr);
 void run_child(int *fd, const char* cmdline, const int idx, const int is_last_command, int bg);
 
+void sigint_handler(int sig);
+void sigtstp_handler(int sig);
+void sigtstp_handler1(int sig);
+void sigchld_handler(int sig);
 
-
-job jobs[MAXPROCESSES];
+volatile job jobs[MAXPROCESSES];
+volatile sig_atomic_t sig_pid;
 
 int main()
 {
@@ -27,7 +30,11 @@ int main()
 
     while (1) {
 	/* Read */
-        printf("CSE4100-MP-P1> ");                   
+        Signal(SIGINT, sigint_handler);
+        Signal(SIGTSTP, sigtstp_handler1);
+
+        printf("CSE4100-MP-P1> ");
+        fflush(stdout);
         fgets(cmdline, MAXLINE, stdin); 
         if (feof(stdin))
             exit(0);
@@ -51,9 +58,14 @@ int eval(char *cmdline)
     int builtin_condition; /*  */
     char *piped_commands[MAXPIPES+1];
     int num_piped_commands;
-
     pid_t pid;             /* Process id */
-    
+    sigset_t mask, prev;
+
+    Sigemptyset(&mask);
+    Sigaddset(&mask, SIGCHLD);
+
+    Signal(SIGCHLD, sigchld_handler);
+
     builtin_condition = 0;
 
     strcpy(buf, cmdline);
@@ -67,7 +79,11 @@ int eval(char *cmdline)
     save_shell_history();
 
     if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
+        Sigprocmask(SIG_BLOCK, &mask, &prev);
+        Signal(SIGTSTP, SIG_IGN);
+
         if(strpbrk(cmdline, "|") != NULL){
+
             strcpy(pipe_buf, cmdline);
 
             if((num_piped_commands = token_pipe_command(piped_commands, pipe_buf)) == 0){
@@ -75,12 +91,13 @@ int eval(char *cmdline)
                 exit(1);
             }
 
-            run_pipe(piped_commands, num_piped_commands, bg);
+            run_pipe(piped_commands, num_piped_commands, bg, &prev);
 
         }
         else{
             if ((pid = Fork()) == 0){
-                
+                Signal(SIGINT, SIG_DFL);
+                Signal(SIGTSTP, SIG_DFL);
 
                 if(!getexecpath(name, argv[0]))
                     strcpy(name, argv[0]);
@@ -90,14 +107,18 @@ int eval(char *cmdline)
                     exit(1);
                 }
             }
-            if (!bg){ 
-                int status;
-                Waitpid(pid, &status, 0);
+            sig_pid = 0;
+            if (!bg){
+                while(!sig_pid){
+                    Sigsuspend(&prev);
+                }
             }
             else{
-                addJob(jobs, pid, cmdline);
+                addJob(jobs, pid, JOB_RUNNING, cmdline);
             }
         }
+        Sigprocmask(SIG_SETMASK, &prev, NULL);
+        signal(SIGINT, SIG_IGN);
     }
     else if(builtin_condition == 2){
         history_command(argv[0], cmdline);
@@ -142,13 +163,16 @@ int builtin_command(char **argv)
         return 1;
     }
     if (!strcmp(argv[0], "kill")){
-        killJob(jobs, atoi(argv[1]));
+        killJob(jobs, argv);
+        return 1;
     }
     if (!strcmp(argv[0], "bg")){
-        bg(jobs, atoi(argv[1]));
+        bg(jobs, argv);
+        return 1;
     }
     if (!strcmp(argv[0], "fg")){
-        fg(jobs, atoi(argv[1]));
+        fg(jobs, argv);
+        return 1;
     }
 
     return 0;
@@ -239,10 +263,9 @@ int token_pipe_command(char** piped_commands, char* cmdline){
     return pipe_idx;
 }
 
-int run_pipe(char** piped_commands, const int num_piped_commands, int bg){
+int run_pipe(char** piped_commands, const int num_piped_commands, int bg, sigset_t *prev_addr){
     int fd[2 * (num_piped_commands-1)];
     int status;
-    pid_t pid;
 
     for(int i = 0; i < 2 * (num_piped_commands-1); i+=2)
         pipe(fd+i);
@@ -254,8 +277,11 @@ int run_pipe(char** piped_commands, const int num_piped_commands, int bg){
     for(int i = 0; i < 2 * (num_piped_commands-1); i++){
         close(fd[i]);
     }
-
-    if(!bg) while((pid = wait(&status)) > 0);
+    sig_pid = 0;
+    if(!bg){
+        while(!sig_pid)
+            Sigsuspend(prev_addr);
+    }
 }
 
 void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_commands, int bg){
@@ -269,6 +295,9 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
     parseline(buf, argv);
 
     if((pid = Fork()) == 0){
+        Signal(SIGINT, SIG_DFL);
+        Signal(SIGTSTP, SIG_DFL);
+
         if(!getexecpath(name, argv[0]))
             strcpy(name, argv[0]);
 
@@ -288,8 +317,8 @@ void run_child(int *fd, const char* cmdline, const int idx, const int num_piped_
             exit(1);
         }
     }
-    else if(bg){
-        addJob(jobs, pid, buf);
+    if(bg){
+        addJob(jobs, pid, JOB_RUNNING, cmdline);
     }
 }
 
@@ -298,6 +327,11 @@ int getexecpath(char* path_name, char* exec_name){
     char *token_ptr;
 
     const char *temp = getenv("PATH");
+
+    strcpy(path_name, exec_name);
+
+    if(!access(path_name, X_OK))
+        return 0;
 
     if (temp != NULL){
         path =(char*)malloc(strlen(temp)+1);
@@ -328,4 +362,65 @@ int getexecpath(char* path_name, char* exec_name){
         return 0;
 
     return 1;
+}
+
+void sigchld_handler(int sig){
+    int status;
+    int jobID;
+    int en = errno;
+
+	while ((sig_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
+		if (WIFEXITED(status) || WIFSIGNALED(status)) {	
+			if (WTERMSIG(status) == SIGINT)
+				Sio_puts("\n");
+			if (jobID = findJobID(jobs, sig_pid)) {
+				if (jobs[jobID].state == JOB_RUNNING)
+					continue;
+			}
+			deleteJob(jobs, jobID);
+			break;
+		}
+		if (WIFSTOPPED(status)) {
+			Sio_puts("\n");
+			if ((jobID = findJobID(jobs, sig_pid))) {
+				jobs[jobID].state = JOB_SUSPENDED;
+			}
+			else {
+				addJob(jobs, sig_pid, JOB_SUSPENDED, "");
+			}
+			break;
+		}
+	}
+
+	errno = en;
+
+    return;
+}
+
+void sigint_handler(int sig){
+    Sio_puts("\n");
+
+    return;
+}
+
+void sigtstp_handler(int sig){
+    int num_processes_created;
+
+    num_processes_created = jobs[0].state;
+
+    for(int i = 0; i <= num_processes_created; i++){
+        if(jobs[i].state == JOB_RUNNING){
+            jobs[i].state = JOB_SUSPENDED;
+            kill(-jobs[i].pid, SIGSTOP);
+            jobs[0].state++;
+            return;
+        }
+    }
+}
+
+void sigtstp_handler1(int sig){
+    Sio_puts("\r                 \r");
+    Sio_puts("CSE4100-MP-P1> ");
+
+    return;
 }
