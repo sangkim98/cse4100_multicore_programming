@@ -4,7 +4,7 @@
 
 /* Function prototypes */
 int eval(char *cmdline);
-int parseline(char *buf, char **argv);
+int parseline(char *buf, char **argv, char* cmdline);
 int builtin_command(char **argv);
 int getexecpath(char* path_name, char* exec_name);
 /* Redirection and Pipe Implementation */
@@ -13,7 +13,7 @@ int run_pipe(char** piped_commands, const int num_piped_commands, int bg, sigset
 void run_child(int *fd, char* cmdline, const int idx, const int is_last_command, int bg);
 void deleteAmperSand(char* cmdline);
 char* getFirstNonSpace(char* cmdline);
-int checkJobNumberFormat(char** argv);
+int checkJobNumber(char** argv);
 
 void sigint_handler(int sig);
 void sigtstp_handler(int sig);
@@ -21,7 +21,6 @@ void sigtstp_handler_shell(int sig);
 void sigchld_handler(int sig);
 
 job jobs[MAXPROCESSES+1];
-volatile sig_atomic_t sig_pid;
 
 int main()
 {
@@ -33,12 +32,11 @@ int main()
 
     while (1) {
 	/* Read */
+        save_history = 1;
         Signal(SIGINT, sigint_handler);
         Signal(SIGTSTP, sigtstp_handler_shell);
-
         printf("CSE4100-MP-P1> ");
         fgets(cmdline, MAXLINE, stdin);
-        fflush(stdout);
         if (feof(stdin))
             exit(0);
         /* Evaluate */
@@ -72,16 +70,19 @@ int eval(char *cmdline)
     builtin_condition = 0;
 
     strcpy(buf, cmdline);
-    bg = parseline(buf, argv);
+    bg = parseline(buf, argv, cmdline);
 
     if (argv[0] == NULL)  
         return 0;   /* Ignore empty lines */
-    
-    open_shell_history();
-    add_command_to_history(cmdline);
-    save_shell_history();
+    if(save_history){
+        open_shell_history();
+        add_command_to_history(cmdline);
+        save_shell_history();
+    }
     if (!(builtin_condition = builtin_command(argv))) { //quit -> exit(0), & -> ignore, other -> run
         Sigprocmask(SIG_BLOCK, &mask, &prev);
+        Signal(SIGINT, sigint_handler);
+        Signal(SIGTSTP, sigtstp_handler_shell);
 
         if(strpbrk(cmdline, "|") != NULL){
 
@@ -96,7 +97,6 @@ int eval(char *cmdline)
 
         }
         else{
-            Signal(SIGTSTP, sigtstp_handler_shell);
             if ((pid = Fork()) == 0){
                 Signal(SIGINT, SIG_DFL);
                 Signal(SIGTSTP, SIG_DFL);
@@ -123,15 +123,13 @@ int eval(char *cmdline)
             }
         }
         Sigprocmask(SIG_SETMASK, &prev, NULL);
-        Signal(SIGINT, SIG_IGN);
-        Signal(SIGTSTP, SIG_IGN);
+        Signal(SIGINT, sigint_handler);
+        Signal(SIGTSTP, sigtstp_handler_shell);
     }
     else if(builtin_condition == 2){
-        history_command(argv[0], cmdline);
-        return 1;
+        builtin_condition = history_command(argv[0], cmdline);
+        return builtin_condition;
     }
-
-	/* Parent waits for foreground job to terminate */
 
     return 0;
 }
@@ -171,17 +169,17 @@ int builtin_command(char **argv)
         return 1;
     }
     if (!strcmp(argv[0], "kill")){
-        jobID = checkJobNumberFormat(argv);
+        jobID = checkJobNumber(argv);
         killJob(jobs, jobID);
         return 1;
     }
     if (!strcmp(argv[0], "bg")){
-        jobID = checkJobNumberFormat(argv);
+        jobID = checkJobNumber(argv);
         bg(jobs, jobID);
         return 1;
     }
     if (!strcmp(argv[0], "fg")){
-        jobID = checkJobNumberFormat(argv);
+        jobID = checkJobNumber(argv);
         fg(jobs, jobID);
         return 1;
     }
@@ -192,13 +190,14 @@ int builtin_command(char **argv)
 
 /* $begin parseline */
 /* parseline - Parse the command line and build the argv array */
-int parseline(char *buf, char **argv) 
+int parseline(char *buf, char **argv, char* cmdline) 
 {
     char *delim;         /* Points to first space delimiter */
     char *temp;
+    char new_cmdline[MAXLINE];
+    int new_cmdline_idx;
     int argc;            /* Number of args */
     int bg;              /* Background job? */
-    int condition;
 
     if((buf[strlen(buf)-1]) == '\n')
         buf[strlen(buf)-1] = ' ';  /* Replace trailing '\n' with space */
@@ -212,7 +211,7 @@ int parseline(char *buf, char **argv)
     if(bg = (*temp == '&'))
         *temp = ' ';
 
-    condition = 0;
+    new_cmdline_idx = 0;
 
     /* Build the argv list */
     argc = 0;
@@ -231,19 +230,28 @@ int parseline(char *buf, char **argv)
             }
             delim = temp;
         }
-	    argv[argc++] = buf;
+	    argv[argc] = buf;
 	    *delim = '\0';
+
+        strcpy(new_cmdline+new_cmdline_idx, buf);
+        new_cmdline_idx = strlen(new_cmdline);
+        new_cmdline[new_cmdline_idx++] = ' ';
+
 	    buf = delim + 1;
+
+        argc++;
 	    while (*buf && (*buf == ' ')) /* Ignore spaces */
             buf++;
     }
     argv[argc] = NULL;
     
+    new_cmdline[new_cmdline_idx++] = '\n';
+    new_cmdline[new_cmdline_idx] = '\0';
+
     if (argc == 0)  /* Ignore blank line */
 	    return 1;
 
     /* Should the job run in the background? */
-
     return bg;
 }
 /* $end parseline */
@@ -303,7 +311,7 @@ void run_child(int *fd, char* cmdline, const int idx, const int num_piped_comman
 
     strcpy(buf, cmdline);
 
-    if(parseline(buf, argv))
+    if(parseline(buf, argv, cmdline))
         printf("%s\n", cmdline+strlen(cmdline)-1);
 
     if((pid = Fork()) == 0){
@@ -466,13 +474,15 @@ char* getFirstNonSpace(char* cmdline){
     return cmdline+idx;
 }
 
-int checkJobNumberFormat(char** argv){
+int checkJobNumber(char** argv){
     int jobNum;
 
     if(argv[1][0] == '%'){
-        if(jobNum = atoi(argv[1]+1))
-            return jobNum;
+        if(jobNum = atoi(argv[1]+1)){
+            if(jobs[jobNum].state != JOB_DEFAULT && jobs[jobNum].state != JOB_DONE){
+                return jobNum;
+            }
+        }
     }
-
     return 0;
 }

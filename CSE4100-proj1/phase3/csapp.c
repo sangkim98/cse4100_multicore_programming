@@ -18,7 +18,8 @@
 /* $begin csapp.c */
 #include "csapp.h"
 
-char *jobStates[] = {"", "suspended", "running", "", "", "running"};
+// Stores jobs states to be printed as string constants
+const char *jobStates[] = {"", "suspended", "running", "", "", "running"};
 
 /************************** 
  * Error-handling functions
@@ -1035,6 +1036,14 @@ int Open_listenfd(char *port)
  * History functions
  ************************************************/
 
+/**
+ * Initializes the directory of the shell history file to be located
+ * 
+ * params: none
+ * 
+ * return: returns 0 if cwd can not be retrieved
+ *         returns 1 if shell history file location has been set 
+ */
 int set_shell_history_location(void){
     if(getcwd(shell_history_location, MAXLINE) == NULL)
         return 0;
@@ -1043,42 +1052,41 @@ int set_shell_history_location(void){
     return 1;
 }
 
-void open_shell_history(void){
+/**
+ * opens shell history file in the cwd of the shell executable
+ * 
+ * return: none
+ */
+void open_shell_history(){   
     history_fp = fopen(shell_history_location, "r");
 
-    if(history_fp == NULL){
+    if(history_fp == NULL){ // if no history file is located in cwd create new history file
         history_fp = fopen(shell_history_location, "w");
 
-        fputs("0", history_fp);
         fclose(history_fp);
 
         history_fp = fopen(shell_history_location, "r");
     }
 
-    char hist_cmdline[MAXLINE], *pEnd;
-
-    Fgets(hist_cmdline, MAXLINE, history_fp);
+    fseek(history_fp, 0, SEEK_END);
 
     hist_head = (HIST_ENTRY*)Malloc(sizeof(HIST_ENTRY));
+    hist_head->value.num_entries = 0;
 
-    hist_head->value.num_entries = strtol(hist_cmdline, &pEnd, 10);
-    if(pEnd == hist_cmdline){
-        unix_error("open_shell_history error");
-    };
+    fseek(history_fp, 0, SEEK_SET);
 
-    set_shell_history_memory(hist_cmdline);
+    set_shell_history_memory();
 
     Fclose(history_fp);
 }
 
-void set_shell_history_memory(char* hist_cmdline){
+void set_shell_history_memory(void){
     HIST_ENTRY *hist_p, *prev_p;
     int command_len;
+    char hist_cmdline[MAXLINE];
 
     prev_p = hist_head;
-    for(int i = 0; i < hist_head->value.num_entries; i++){
-        Fgets(hist_cmdline, MAXLINE, history_fp);
-
+    while(Fgets(hist_cmdline, MAXLINE, history_fp) != NULL){
         command_len = strlen(hist_cmdline)+1;
 
         hist_p = (HIST_ENTRY*)malloc(sizeof(HIST_ENTRY));
@@ -1104,7 +1112,6 @@ void save_shell_history(void){
 
     history_fp = Fopen(tempName, "w");
 
-    fprintf(history_fp, "%d\n", hist_head->value.num_entries);
     hist_p = hist_head->next_data;
     while(hist_p != NULL){
         fprintf(history_fp, "%s",hist_p->value.cmdline);
@@ -1172,11 +1179,13 @@ void remove_command_from_history(char *cmd){
 }
 
 int history_command(char* extension, char* cmdline){
-    if (!strcmp(extension, "!!")){
+    if (extension[0] == extension[1]){
         if(hist_head->next_data == NULL){
+            printf("no command records saved in history\n");
             return 0;
         }
         strcpy(cmdline, hist_tail->value.cmdline);
+        save_history = 0;
         printf("%s", cmdline);
     }
     else if (digits_only(extension+1)){
@@ -1191,13 +1200,19 @@ int history_command(char* extension, char* cmdline){
         }
         
         if(hist_p == NULL){
+            printf("no such event found\n");
             return 0;
+        }
+        if(hist_p == hist_tail){
+            save_history = 0;
         }
 
         strcpy(cmdline, hist_p->value.cmdline);
-
+        save_history = 0;
+        printf("%s", cmdline);
     }
     else{
+        printf("no such event found\n");
         return 0;
     }
 
@@ -1240,7 +1255,7 @@ int digits_only(char* arg){
  * Job functions
  ************************************************/
 
-void addJob(job* jobs, pid_t pid, int state, const char* cmdline){
+void addJob(job* jobs, pid_t pid, int state, char* cmdline){
     int new_jobID, cmd_len;
     
     ++num_jobs;
@@ -1306,18 +1321,20 @@ void bg(job* jobs, int jobID){
     if (kill(pid, SIGCONT) < 0) {
         unix_error("kill error");
     }
-    printf("[%d]  %s %s\n", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
+    printf("[%d]  %s %s", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
 }
 
 void fg(job* jobs, int jobID){
-    pid_t pid;
+    pid_t pid, job_pid;
+    sigset_t emptyset;
+    Sigemptyset(&emptyset);
 
-    if (jobID == 0) {	
+    if (jobID == 0) {
         printf("No such job\n");
         return;
     }
 
-    pid = jobs[jobID].pid;	
+    job_pid = jobs[jobID].pid;	
 
     Signal(SIGTTOU, SIG_IGN);
     Signal(SIGTTIN, SIG_IGN);
@@ -1326,7 +1343,13 @@ void fg(job* jobs, int jobID){
 
     if (jobs[jobID].state == JOB_SUSPENDED){
         jobs[jobID].state = JOB_FOREGROUND;
-        kill(pid, SIGCONT);	
+        kill(job_pid, SIGCONT);	
+    }
+
+    printf("[%d]  %s %s", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
+
+    while(sig_pid != job_pid){
+        Sigsuspend(&emptyset);
     }
 
     Signal(SIGTTOU, SIG_DFL);
@@ -1334,7 +1357,6 @@ void fg(job* jobs, int jobID){
     Signal(SIGTSTP, SIG_DFL);
     Signal(SIGTSTP, SIG_DFL);
 
-    printf("[%d]  %s %s\n", jobID, jobStates[jobs[jobID].state], jobs[jobID].cmd);
 }
 
 /* $end csapp.c */

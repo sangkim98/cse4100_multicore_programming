@@ -92,6 +92,8 @@ typedef struct _job{
 } job;
 
 int num_jobs;
+int save_history;
+volatile sig_atomic_t sig_pid;
 
 /* Our own error-handling functions */
 void unix_error(char *msg);
@@ -234,7 +236,7 @@ HIST_ENTRY *hist_head, *hist_tail;
 
 int set_shell_history_location(void);
 void open_shell_history(void);
-void set_shell_history_memory(char* hist_cmdline);
+void set_shell_history_memory(void);
 void save_shell_history(void);
 void add_command_to_history(char *cmdline);
 void remove_command_from_history(char *cmd);
@@ -244,7 +246,7 @@ int digits_only(char* arg);
 
 /* Job implementation */
 void initJobs(job* jobs);
-void addJob(job* jobs, pid_t pid, int state, const char* cmdline);
+void addJob(job* jobs, pid_t pid, int state, char* cmdline);
 void printAllJobs(job* jobs);
 int findJobID(job* jobs, pid_t pid);
 void deleteJob(job* jobs, int pid);
