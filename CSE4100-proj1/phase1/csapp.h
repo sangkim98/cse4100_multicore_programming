@@ -72,6 +72,8 @@ extern char **environ; /* Defined by libc */
 #define LISTENQ  1024  /* Second argument to listen() */
 #define SHELL_HIST_FNAME "/.shell_history"
 
+int save_history;
+
 /* Our own error-handling functions */
 void unix_error(char *msg);
 void posix_error(int code, char *msg);
@@ -213,7 +215,7 @@ HIST_ENTRY *hist_head, *hist_tail;
 
 int set_shell_history_location(void);
 void open_shell_history(void);
-void set_shell_history_memory(char* hist_cmdline);
+void set_shell_history_memory(void);
 void save_shell_history(void);
 void add_command_to_history(char *cmdline);
 void remove_command_from_history(char *cmd);
