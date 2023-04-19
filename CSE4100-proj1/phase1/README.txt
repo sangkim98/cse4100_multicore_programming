@@ -33,3 +33,4 @@ Phase 1: Run child process
 3-2. Note for history:
         For history, .shell_history file is created once 'myshell' binary file executes it's first instruction.
         .shell_history file is created in the same directory as 'myshell' binary.
+        

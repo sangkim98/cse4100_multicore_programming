@@ -1126,7 +1126,7 @@ void add_command_to_history(char *cmdline){
     int cmd_len;
     HIST_ENTRY *hist_p;
 
-    if(!strcmp(cmdline, "!!\n"))
+    if(!strcmp(cmdline, "!! \n"))
         return;
     if(cmdline[0] == '!' && digits_only(cmdline+1))
         return;
@@ -1176,7 +1176,7 @@ void remove_command_from_history(char *cmd){
 }
 
 int history_command(char* extension, char* cmdline){
-    if (!strcmp(extension, "!! ")){
+    if (extension[0] == extension[1]){
         if(hist_head->next_data == NULL){
             printf("no command records saved in history\n");
             return 0;
@@ -1200,9 +1200,11 @@ int history_command(char* extension, char* cmdline){
             printf("no such event found\n");
             return 0;
         }
+        if(hist_p == hist_tail){
+            save_history = 0;
+        }
 
         strcpy(cmdline, hist_p->value.cmdline);
-        save_history = 0;
         printf("%s", cmdline);
     }
     else{
