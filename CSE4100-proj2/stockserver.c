@@ -3,6 +3,7 @@
  */ 
 /* $begin echoserverimain */
 #include "csapp.h"
+#include "stock_data_structure.h"
 
 void echo(int connfd);
 

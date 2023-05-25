@@ -31,3 +31,6 @@ Phase 1: Run child process
         Note:
                 - File redirection is not implemented.
                 - Pipes are not supported with built in commands including history
+4. Test
+        compile sleep test file with make test.
+        test binary file named test will be created

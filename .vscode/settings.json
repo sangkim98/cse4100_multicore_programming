@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "features.h": "c",
-        "stat.h": "c"
+        "stat.h": "c",
+        "dirent.h": "c"
     }
 }
