@@ -1,6 +1,8 @@
 #ifndef __DATA_STRUCTURE__
 #define __DATA_STRUCTURE__
 
+#define FILENAME "./stock.txt"
+
 #include "csapp.h"
 typedef struct _stock_item
 {
@@ -29,12 +31,18 @@ int buy(stock_tree_head *head, int ID, int num_buy);
 
 int show(stock_tree_head *head);
 
-int show_subfunc(stock_item *travel);
+void show_subfunc(stock_item *travel);
 
 stock_item *find(stock_tree_head *head, int ID);
 
 int add_item(stock_tree_head *head, int ID, int num_stocks, int price);
 
 stock_item *create_stock_item(int ID, int num_stocks, int price);
+
+int save_to_txt(stock_tree_head *head);
+
+void save_to_txt_subfunc(stock_item *travel, FILE *fp);
+
+int load_from_txt(stock_tree_head *head);
 
 #endif

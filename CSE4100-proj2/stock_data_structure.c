@@ -16,6 +16,8 @@ int sell(stock_tree_head *head, int ID, int num_sell)
         int random_price = rand() % 100000;
         add_item(head, ID, num_sell, random_price);
     }
+
+    return 0;
 }
 
 int buy(stock_tree_head *head, int ID, int num_buy)
@@ -50,9 +52,11 @@ int show(stock_tree_head *head)
     first_item = head->first_stock_pt;
 
     show_subfunc(first_item);
+
+    return 0;
 }
 
-int show_subfunc(stock_item *travel)
+void show_subfunc(stock_item *travel)
 {
     if (travel)
     {
@@ -143,4 +147,54 @@ stock_item *create_stock_item(int ID, int num_stocks, int price)
     new_item->leftp = new_item->rightp = NULL;
     new_item->price = price;
     new_item->stocks_left = num_stocks;
+
+    return new_item;
+}
+
+int save_to_txt(stock_tree_head *head)
+{
+    FILE *fp;
+
+    fp = fopen(FILENAME, "w");
+
+    if (!fp)
+    {
+        printf("File not opened\n");
+        return 1;
+    }
+
+    save_to_txt_subfunc(head->first_stock_pt, fp);
+
+    fclose(fp);
+
+    return 0;
+}
+
+void save_to_txt_subfunc(stock_item *travel, FILE *fp)
+{
+    if (travel)
+    {
+        save_to_txt_subfunc(travel->leftp, fp);
+        fprintf(fp, "%d %d %d\n", travel->ID, travel->stocks_left, travel->price);
+        save_to_txt_subfunc(travel->rightp, fp);
+    }
+}
+
+int load_from_txt(stock_tree_head *head)
+{
+    FILE *fp = fopen(FILENAME, "r");
+    int ID, num_stocks, price;
+
+    if (fp)
+    {
+        printf("File %s do not exist\n", FILENAME);
+        return 1;
+    }
+
+    while (fscanf(fp, "%d %d %d\n", &ID, &num_stocks, &price))
+    {
+        add_item(head, ID, num_stocks, price);
+    }
+
+    return 0;
 }
