@@ -1,6 +1,6 @@
 #include "stock_data_structure.h"
 
-int sell(stock_tree_head *head, int ID, int num_sell)
+int sell(stock_tree_head *head, int ID, int num_sell, char *buf)
 {
     stock_item *item_found;
 
@@ -20,7 +20,7 @@ int sell(stock_tree_head *head, int ID, int num_sell)
     return 0;
 }
 
-int buy(stock_tree_head *head, int ID, int num_buy)
+int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
 {
     stock_item *stock_to_buy;
 
@@ -28,41 +28,44 @@ int buy(stock_tree_head *head, int ID, int num_buy)
 
     if (stock_to_buy == NULL)
     {
-        printf("No such stock\n");
-        return 1;
+        sprintf(buf, "%s", "No such stock\n");
+        return 14;
     }
 
     if (stock_to_buy->stocks_left < num_buy)
     {
-        printf("Not enough left stock\n");
+        sprintf(buf, "%s", "Not enough left stock\n");
+        return 22;
     }
     else
     {
         stock_to_buy->stocks_left -= num_buy;
-        printf("[buy]\n");
+        sprintf(buf, "%s", "[buy]\n");
+        return 6;
     }
 
     return 0;
 }
 
-int show(stock_tree_head *head)
+int show(stock_tree_head *head, int connfd, char *buf)
 {
     stock_item *first_item;
 
     first_item = head->first_stock_pt;
 
-    show_subfunc(first_item);
+    show_subfunc(first_item, connfd, buf);
 
     return 0;
 }
 
-void show_subfunc(stock_item *travel)
+void show_subfunc(stock_item *travel, int connfd, char *buf)
 {
     if (travel)
     {
-        show_subfunc(travel->leftp);
-        printf("%d %d %d", travel->ID, travel->stocks_left, travel->price);
-        show_subfunc(travel->rightp);
+        show_subfunc(travel->leftp, connfd, buf);
+        sprintf(buf, "%d %d %d\n", travel->ID, travel->stocks_left, travel->price);
+        Rio_writen(connfd, buf, strlen(buf));
+        show_subfunc(travel->rightp, connfd, buf);
     }
 }
 
@@ -185,11 +188,14 @@ int load_from_txt(stock_tree_head *head)
     FILE *fp = fopen(FILENAME, "r");
     int ID, num_stocks, price;
 
-    if (fp)
+    if (!fp)
     {
         printf("File %s do not exist\n", FILENAME);
         return 1;
     }
+
+    head->first_stock_pt = NULL;
+    head->num_stocks = 0;
 
     while (fscanf(fp, "%d %d %d\n", &ID, &num_stocks, &price))
     {

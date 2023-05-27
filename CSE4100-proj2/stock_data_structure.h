@@ -1,7 +1,10 @@
 #ifndef __DATA_STRUCTURE__
 #define __DATA_STRUCTURE__
 
-#define FILENAME "./stock.txt"
+#define FILENAME "stock.txt"
+#define SELLSTRING "sell"
+#define BUYSTRING "buy"
+#define SHOWSTRING "show"
 
 #include "csapp.h"
 typedef struct _stock_item
@@ -25,13 +28,20 @@ typedef struct _stock_tree_head
     sem_t mutex;
 } stock_tree_head;
 
-int sell(stock_tree_head *head, int ID, int num_sell);
+enum Command_Options
+{
+    Sell,
+    Buy,
+    Show
+};
 
-int buy(stock_tree_head *head, int ID, int num_buy);
+int sell(stock_tree_head *head, int ID, int num_sell, char *buf);
 
-int show(stock_tree_head *head);
+int buy(stock_tree_head *head, int ID, int num_buy, char *buf);
 
-void show_subfunc(stock_item *travel);
+int show(stock_tree_head *head, int connfd, char *buf);
+
+void show_subfunc(stock_item *travel, int connfd, char *buf);
 
 stock_item *find(stock_tree_head *head, int ID);
 
