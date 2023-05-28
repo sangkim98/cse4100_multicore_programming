@@ -8,7 +8,7 @@
 stock_tree_head head;
 
 void echo(int connfd);
-void stock_service(int connfd, stock_tree_head *head);
+void stock_service(int connfd);
 void stock_command(char buf[], int command_args[3]);
 
 int main(int argc, char **argv)
@@ -34,18 +34,16 @@ int main(int argc, char **argv)
         Getnameinfo((SA *)&clientaddr, clientlen, client_hostname, MAXLINE,
                     client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        echo(connfd);
-        // stock_service(connfd, &head);
+        // echo(connfd);
+        stock_service(connfd);
         Close(connfd);
     }
-
-    save_to_txt(&head);
 
     exit(0);
 }
 /* $end echoserverimain */
 
-void stock_service(int connfd, stock_tree_head *head)
+void stock_service(int connfd)
 {
     int n, command_args[3];
     char buf[MAXLINE];
@@ -60,26 +58,28 @@ void stock_service(int connfd, stock_tree_head *head)
 
         switch (command_args[0]){
             case Sell:
-                n = sell(head, command_args[1], command_args[2], buf);
+                n = sell(&head, command_args[1], command_args[2], buf);
                 Rio_writen(connfd, buf, n);
-                save_to_txt(head);
+                save_to_txt(&head);
                 break;
             case Buy:
-                n = buy(head, command_args[1], command_args[2], buf);
+                n = buy(&head, command_args[1], command_args[2], buf);
                 Rio_writen(connfd, buf, n);
-                save_to_txt(head);
+                save_to_txt(&head);
                 break;
             case Show:
-                show(head, connfd, buf);
+                n = show(&head, connfd, buf);
+                Rio_writen(connfd, buf, n);
                 break;
             default:
+	            Rio_writen(connfd, buf, n);
                 break;
         }
     }
 }
 
 void stock_command(char buf[], int command_args[3]){
-    char command[MAXCOMMAND] = {'\0'};
+    char command[MAXLINE] = {'\0'};
 
     int i;
 
@@ -102,5 +102,8 @@ void stock_command(char buf[], int command_args[3]){
         sscanf(buf, "%s %d %d", command, command_args+1, command_args+2);
     }else if(!strcmp(SHOWSTRING, command)){
         command_args[0] = Show;
+    }
+    else{
+        command_args[0] = Echo;
     }
 }
