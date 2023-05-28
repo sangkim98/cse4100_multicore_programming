@@ -52,27 +52,28 @@ void stock_service(int connfd)
     Rio_readinitb(&rio, connfd);
     while ((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0)
     {
-        printf("server received %s", buf);
+        printf("server received %d bytes of command %s", n, buf);
 
         stock_command(buf, command_args);
 
         switch (command_args[0]){
             case Sell:
                 n = sell(&head, command_args[1], command_args[2], buf);
-                Rio_writen(connfd, buf, n);
+                Rio_writen(connfd, buf, MAXLINE);
                 save_to_txt(&head);
                 break;
             case Buy:
                 n = buy(&head, command_args[1], command_args[2], buf);
-                Rio_writen(connfd, buf, n);
+                Rio_writen(connfd, buf, MAXLINE);
                 save_to_txt(&head);
                 break;
             case Show:
                 n = show(&head, connfd, buf);
-                Rio_writen(connfd, buf, n);
+                Rio_writen(connfd, buf, MAXLINE);
                 break;
             default:
-	            Rio_writen(connfd, buf, n);
+                n = sprintf(buf, "No such command\n");
+	            Rio_writen(connfd, buf, MAXLINE);
                 break;
         }
     }
