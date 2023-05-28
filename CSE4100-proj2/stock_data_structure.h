@@ -32,7 +32,8 @@ enum Command_Options
 {
     Sell,
     Buy,
-    Show
+    Show,
+    Echo
 };
 
 int sell(stock_tree_head *head, int ID, int num_sell, char *buf);
@@ -41,7 +42,7 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf);
 
 int show(stock_tree_head *head, int connfd, char *buf);
 
-void show_subfunc(stock_item *travel, int connfd, char *buf);
+int show_subfunc(stock_item *travel, int connfd, char *buf);
 
 stock_item *find(stock_tree_head *head, int ID);
 

@@ -9,15 +9,17 @@ int sell(stock_tree_head *head, int ID, int num_sell, char *buf)
     if (item_found)
     {
         item_found->stocks_left += num_sell;
-        return 0;
     }
     else
     {
         int random_price = rand() % 100000;
         add_item(head, ID, num_sell, random_price);
-    }
 
-    return 0;
+    }
+    
+    sprintf(buf, "%s", "[sell]\n");
+
+    return 7;
 }
 
 int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
@@ -50,23 +52,26 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
 int show(stock_tree_head *head, int connfd, char *buf)
 {
     stock_item *first_item;
+    int output_len;
 
     first_item = head->first_stock_pt;
 
-    show_subfunc(first_item, connfd, buf);
+    output_len = show_subfunc(first_item, connfd, buf);
 
-    return 0;
+    return output_len;
 }
 
-void show_subfunc(stock_item *travel, int connfd, char *buf)
+int show_subfunc(stock_item *travel, int connfd, char *buf)
 {
+    int output_len = 0;
     if (travel)
     {
-        show_subfunc(travel->leftp, connfd, buf);
-        sprintf(buf, "%d %d %d\n", travel->ID, travel->stocks_left, travel->price);
-        Rio_writen(connfd, buf, strlen(buf));
-        show_subfunc(travel->rightp, connfd, buf);
+        output_len += show_subfunc(travel->leftp, connfd, buf+output_len);
+        output_len += sprintf(buf+output_len, "%d %d %d\n", travel->ID, travel->stocks_left, travel->price);
+        output_len += show_subfunc(travel->rightp, connfd, buf+output_len);
     }
+
+    return output_len;
 }
 
 stock_item *find(stock_tree_head *head, int ID)
@@ -197,10 +202,12 @@ int load_from_txt(stock_tree_head *head)
     head->first_stock_pt = NULL;
     head->num_stocks = 0;
 
-    while (fscanf(fp, "%d %d %d\n", &ID, &num_stocks, &price))
+    while (fscanf(fp, "%d %d %d", &ID, &num_stocks, &price) != EOF)
     {
         add_item(head, ID, num_stocks, price);
     }
+
+    fclose(fp);
 
     return 0;
 }
