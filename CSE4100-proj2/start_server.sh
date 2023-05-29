@@ -1,2 +1,2 @@
 make
-./stockserver 60016 &
+./stockserver 60016

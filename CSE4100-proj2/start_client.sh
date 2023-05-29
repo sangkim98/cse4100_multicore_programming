@@ -1,2 +1,2 @@
 make
-./stockclient 172.30.10.10 60016
+./multiclient 172.30.10.9 60016 10
