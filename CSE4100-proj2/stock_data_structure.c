@@ -8,13 +8,14 @@ int sell(stock_tree_head *head, int ID, int num_sell, char *buf)
 
     if (item_found)
     {
+        P(&item_found->mutex_write);
         item_found->stocks_left += num_sell;
+        V(&item_found->mutex_write);
     }
     else
     {
         int random_price = rand() % 100000;
         add_item(head, ID, num_sell, random_price);
-
     }
     
     sprintf(buf, "%s", "[sell]\n");
@@ -27,6 +28,8 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
     stock_item *stock_to_buy;
 
     stock_to_buy = find(head, ID);
+
+    P(&stock_to_buy->mutex_write);
 
     if (stock_to_buy == NULL)
     {
@@ -45,6 +48,8 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
         sprintf(buf, "%s", "[buy]\n");
         return 6;
     }
+
+    V(&stock_to_buy->mutex_write);
 
     return 0;
 }
@@ -66,9 +71,19 @@ int show_subfunc(stock_item *travel, int connfd, char *buf)
     int output_len = 0;
     if (travel)
     {
+        P(&travel->mutex_read);
+        travel->readcnt++;
+        if(travel->readcnt == 1)
+            P(&travel->mutex_write);
+        V(&travel->mutex_read);
         output_len += show_subfunc(travel->leftp, connfd, buf+output_len);
         output_len += sprintf(buf+output_len, "%d %d %d\n", travel->ID, travel->stocks_left, travel->price);
         output_len += show_subfunc(travel->rightp, connfd, buf+output_len);
+        P(&travel->mutex_read);
+        travel->readcnt--;
+        if(travel->readcnt == 0)
+            V(&travel->mutex_write);
+        V(&travel->mutex_read);
     }
 
     return output_len;
@@ -116,13 +131,16 @@ int add_item(stock_tree_head *head, int ID, int num_stocks, int price)
 
     if (!curr)
     {
+        P(&head->mutex);
         head->first_stock_pt = new_item;
+        V(&head->mutex);
     }
     else
     {
         while (curr)
         {
             prev = curr;
+            P(&prev->mutex_read);
             if (ID > curr->ID)
             {
                 curr = curr->rightp;
@@ -131,8 +149,11 @@ int add_item(stock_tree_head *head, int ID, int num_stocks, int price)
             {
                 curr = curr->leftp;
             }
+            V(&prev->mutex_read);
         }
 
+        P(&prev->mutex_read);
+        P(&prev->mutex_write);
         if (ID > prev->ID)
         {
             prev->rightp = new_item;
@@ -141,6 +162,8 @@ int add_item(stock_tree_head *head, int ID, int num_stocks, int price)
         {
             prev->leftp = new_item;
         }
+        V(&prev->mutex_write);
+        V(&prev->mutex_read);
     }
 
     head->num_stocks++;
@@ -155,6 +178,10 @@ stock_item *create_stock_item(int ID, int num_stocks, int price)
     new_item->leftp = new_item->rightp = NULL;
     new_item->price = price;
     new_item->stocks_left = num_stocks;
+    new_item->readcnt = 0;
+
+    Sem_init(&new_item->mutex_read, 0, 1);
+    Sem_init(&new_item->mutex_write, 0, 1);
 
     return new_item;
 }
