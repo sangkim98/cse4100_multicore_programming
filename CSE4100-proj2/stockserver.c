@@ -9,7 +9,7 @@ stock_tree_head head;
 
 void echo(int connfd);
 void stock_service(int connfd);
-void stock_command(char buf[], int command_args[3]);
+void parse_stock_command(char buf[], int command_args[3]);
 
 int main(int argc, char **argv)
 {
@@ -34,7 +34,6 @@ int main(int argc, char **argv)
         Getnameinfo((SA *)&clientaddr, clientlen, client_hostname, MAXLINE,
                     client_port, MAXLINE, 0);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        // echo(connfd);
         stock_service(connfd);
         Close(connfd);
     }
@@ -54,18 +53,18 @@ void stock_service(int connfd)
     {
         printf("server received %d bytes of command %s", n, buf);
 
-        stock_command(buf, command_args);
+        parse_stock_command(buf, command_args);
 
         switch (command_args[0]){
             case Sell:
                 n = sell(&head, command_args[1], command_args[2], buf);
-                Rio_writen(connfd, buf, MAXLINE);
                 save_to_txt(&head);
+                Rio_writen(connfd, buf, MAXLINE);
                 break;
             case Buy:
                 n = buy(&head, command_args[1], command_args[2], buf);
-                Rio_writen(connfd, buf, MAXLINE);
                 save_to_txt(&head);
+                Rio_writen(connfd, buf, MAXLINE);
                 break;
             case Show:
                 n = show(&head, connfd, buf);
@@ -79,7 +78,7 @@ void stock_service(int connfd)
     }
 }
 
-void stock_command(char buf[], int command_args[3]){
+void parse_stock_command(char buf[], int command_args[3]){
     char command[MAXLINE] = {'\0'};
 
     int i;
