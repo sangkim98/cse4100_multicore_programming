@@ -29,8 +29,6 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
 
     stock_to_buy = find(head, ID);
 
-    P(&stock_to_buy->mutex_write);
-
     if (stock_to_buy == NULL)
     {
         sprintf(buf, "%s", "No such stock\n");
@@ -44,13 +42,12 @@ int buy(stock_tree_head *head, int ID, int num_buy, char *buf)
     }
     else
     {
+        P(&stock_to_buy->mutex_write);
         stock_to_buy->stocks_left -= num_buy;
+        V(&stock_to_buy->mutex_write);
         sprintf(buf, "%s", "[buy]\n");
         return 6;
     }
-
-    V(&stock_to_buy->mutex_write);
-
     return 0;
 }
 
