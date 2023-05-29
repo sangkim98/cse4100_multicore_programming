@@ -17,14 +17,15 @@ typedef struct _stock_item
     struct _stock_item *leftp;
     struct _stock_item *rightp;
 
-    sem_t mutex;
+    sem_t mutex_read;
+    sem_t mutex_write;
 } stock_item;
 
 typedef struct _stock_tree_head
 {
     int num_stocks;
     stock_item *first_stock_pt;
-
+    
     sem_t mutex;
 } stock_tree_head;
 
