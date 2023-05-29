@@ -26,6 +26,8 @@ int main(int argc, char **argv)
         exit(0);
     }
 
+    Sem_init(&head.mutex, 0, 1);
+
     load_from_txt(&head);
 
     listenfd = Open_listenfd(argv[1]);
