@@ -12,6 +12,7 @@ void echo(int connfd);
 void stock_service(int connfd);
 void parse_stock_command(char buf[], int command_args[3]);
 void *thread(void *vargp);
+void int_handler(int sig);
 
 int main(int argc, char **argv)
 {
@@ -20,7 +21,8 @@ int main(int argc, char **argv)
     struct sockaddr_storage clientaddr; /* Enough space for any address */ // line:netp:echoserveri:sockaddrstorage
     char client_hostname[MAXLINE], client_port[MAXLINE];
     pthread_t tid;
-
+    Signal(SIGINT, int_handler);
+ 
     if (argc != 2)
     {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -44,8 +46,6 @@ int main(int argc, char **argv)
         sbuf_insert(&sbuf, connfd);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
     }
-
-    save_to_txt(&head);
 
     exit(0);
 }
@@ -124,4 +124,9 @@ void *thread(void *vargp){
         stock_service(connfd);
         Close(connfd);
     }
+}
+
+void int_handler(int sig){
+    save_to_txt(&head);
+    exit(0);
 }
