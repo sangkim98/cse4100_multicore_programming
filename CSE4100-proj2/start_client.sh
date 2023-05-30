@@ -1,2 +1,2 @@
 make
-./multiclient 172.30.10.9 60016 10
+./multiclient 172.30.10.9 60016 4
