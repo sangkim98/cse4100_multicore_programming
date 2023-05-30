@@ -67,12 +67,10 @@ void stock_service(int connfd)
         switch (command_args[0]){
             case Sell:
                 n = sell(&head, command_args[1], command_args[2], buf);
-                // save_to_txt(&head);
                 Rio_writen(connfd, buf, MAXLINE);
                 break;
             case Buy:
                 n = buy(&head, command_args[1], command_args[2], buf);
-                // save_to_txt(&head);
                 Rio_writen(connfd, buf, MAXLINE);
                 break;
             case Show:
