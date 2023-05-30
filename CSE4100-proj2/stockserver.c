@@ -94,6 +94,12 @@ void stock_service(pool *p)
                         n = show(&head, connfd, buf);
                         Rio_writen(connfd, buf, MAXLINE);
                         break;
+                    case Exit:
+                        Rio_writen(connfd, "Conncection Closed\n", MAXLINE);
+                        Close(connfd);
+                        FD_CLR(connfd, &p->read_set);
+                        p->clientfd[i] = -1;
+                        break;
                     default:
                         n = sprintf(buf, "No such command\n");
                         Rio_writen(connfd, buf, MAXLINE);
@@ -133,6 +139,9 @@ void parse_stock_command(char buf[], int command_args[3]){
         sscanf(buf, "%s %d %d", command, command_args+1, command_args+2);
     }else if(!strcmp(SHOWSTRING, command)){
         command_args[0] = Show;
+    }
+    else if(!strcmp(EXITSTRING, command)){
+        command_args[0] = Exit;
     }
     else{
         command_args[0] = Echo;
