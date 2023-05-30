@@ -5,6 +5,7 @@
 #define SELLSTRING "sell"
 #define BUYSTRING "buy"
 #define SHOWSTRING "show"
+#define EXITSTRING "exit"
 
 #include "csapp.h"
 typedef struct _stock_item
@@ -34,6 +35,7 @@ enum Command_Options
     Sell,
     Buy,
     Show,
+    Exit,
     Echo
 };
 
