@@ -6,6 +6,7 @@
 #include "stock_data_structure.h"
 
 stock_tree_head head;
+sbuf_t sbuf;
 
 void echo(int connfd);
 void stock_service(int connfd);
@@ -14,7 +15,7 @@ void *thread(void *vargp);
 
 int main(int argc, char **argv)
 {
-    int listenfd, *connfdp;
+    int i, listenfd, connfd;
     socklen_t clientlen;
     struct sockaddr_storage clientaddr; /* Enough space for any address */ // line:netp:echoserveri:sockaddrstorage
     char client_hostname[MAXLINE], client_port[MAXLINE];
@@ -31,15 +32,17 @@ int main(int argc, char **argv)
     load_from_txt(&head);
 
     listenfd = Open_listenfd(argv[1]);
+    sbuf_init(&sbuf, SBUFSIZE);
+    for(i = 0; i < NTHREADS; i++)
+        Pthread_create(&tid,NULL,thread,NULL);
     while (1)
     {
         clientlen = sizeof(struct sockaddr_storage);
-        connfdp = Malloc(sizeof(int));
-        *connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
         Getnameinfo((SA *)&clientaddr, clientlen, client_hostname, MAXLINE,
                     client_port, MAXLINE, 0);
+        sbuf_insert(&sbuf, connfd);
         printf("Connected to (%s, %s)\n", client_hostname, client_port);
-        Pthread_create(&tid, NULL, thread, connfdp);
     }
 
     save_to_txt(&head);
@@ -115,11 +118,10 @@ void parse_stock_command(char buf[], int command_args[3]){
 }
 
 void *thread(void *vargp){
-    int connfd = *((int*)vargp);
-
     Pthread_detach(pthread_self());
-    Free(vargp);
-    stock_service(connfd);
-    Close(connfd);
-    return NULL;
+    while(1){
+        int connfd = sbuf_remove(&sbuf);
+        stock_service(connfd);
+        Close(connfd);
+    }
 }

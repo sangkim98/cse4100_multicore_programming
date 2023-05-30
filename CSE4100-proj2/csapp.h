@@ -51,6 +51,16 @@ typedef struct {
 } rio_t;
 /* $end rio_t */
 
+typedef struct {
+    int *buf;
+    int n;
+    int front;
+    int rear;
+    sem_t mutex;
+    sem_t slots;
+    sem_t items;
+} sbuf_t;
+
 /* External variables */
 extern int h_errno;    /* Defined by BIND for DNS errors */ 
 extern char **environ; /* Defined by libc */
@@ -59,6 +69,8 @@ extern char **environ; /* Defined by libc */
 #define	MAXLINE	 8192  /* Max text line length */
 #define MAXBUF   8192  /* Max I/O buffer size */
 #define LISTENQ  1024  /* Second argument to listen() */
+#define SBUFSIZE 64
+#define NTHREADS 8
 #define MAXCOMMAND 5
 
 /* Our own error-handling functions */
@@ -195,6 +207,10 @@ int open_listenfd(char *port);
 int Open_clientfd(char *hostname, char *port);
 int Open_listenfd(char *port);
 
+void sbuf_init(sbuf_t *sp, int n);
+void sbuf_deinit(sbuf_t *sp);
+void sbuf_insert(sbuf_t *sp, int item);
+int sbuf_remove(sbuf_t *sp);
 
 #endif /* __CSAPP_H__ */
 /* $end csapp.h */
