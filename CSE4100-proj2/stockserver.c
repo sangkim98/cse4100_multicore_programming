@@ -22,6 +22,7 @@ void stock_service(pool *p);
 void parse_stock_command(char buf[], int command_args[3]);
 void init_pool(int listenfd, pool* pool);
 void add_client(int connfd, pool *p);
+void int_handler(int sig);
 
 int main(int argc, char **argv)
 {
@@ -30,6 +31,7 @@ int main(int argc, char **argv)
     struct sockaddr_storage clientaddr; /* Enough space for any address */ // line:netp:echoserveri:sockaddrstorage
     char client_hostname[MAXLINE], client_port[MAXLINE];
     static pool pool;
+    Signal(SIGINT, int_handler);
 
     if (argc != 2)
     {
@@ -167,4 +169,9 @@ void add_client(int connfd, pool *p){
     }
     if (i == FD_SETSIZE)
         app_error("add_client error: Too many clients");
+}
+
+void int_handler(int sig){
+    save_to_txt(&head);
+    exit(0);
 }
