@@ -24,11 +24,11 @@
  ********************************************************/
 team_t team = {
     /* Your student ID */
-    "20XXXXXX",
+    "20181605",
     /* Your full name*/
-    "Gildong Hong",
+    "Kim Sanghyeon",
     /* Your email address */
-    "example@sogang.ac.kr",
+    "anton3017@sogang.ac.kr",
 };
 
 /* single word (4) or double word (8) alignment */
@@ -69,6 +69,7 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
+    
 }
 
 /*
