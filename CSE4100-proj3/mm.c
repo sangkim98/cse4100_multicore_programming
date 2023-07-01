@@ -66,9 +66,9 @@ team_t team = {
 
 // Given block find previous or next free block in explicit list
 #define PRED_FREE(bp) (*(void **)(bp))
-#define SUCC_FREE(bp) (*(void **)(bp + WORDSIZE))
+#define SUCC_FREE(bp) (*(void **)((char *)bp + WORDSIZE))
 
-void *segregation_list[LISTLIMIT];
+void *seg_list[LISTLIMIT];
 
 void *extend_heap(size_t words);
 void *coalesce(void *bp);
@@ -86,7 +86,7 @@ int mm_init(void)
 
     for (int list = 0; list < LISTLIMIT; list++)
     {
-        segregation_list[list] = NULL;
+        seg_list[list] = NULL;
     }
 
     if ((bp = mem_sbrk(4 * WORDSIZE)) == (void *)-1)
@@ -183,7 +183,7 @@ void *first_fit(size_t asize)
     {
         if (asize >= (1 << (list_idx - 1)))
         {
-            bp = segregation_list[list_idx];
+            bp = seg_list[list_idx];
             while (bp && (asize > GET_SIZE(HTAGP(bp))))
             {
                 bp = SUCC_FREE(bp);
@@ -282,7 +282,7 @@ void insert_block(void *bp, size_t size)
         list++;
     }
 
-    search_ptr = segregation_list[list];
+    search_ptr = seg_list[list];
     while (search_ptr && (size > GET_SIZE(HTAGP(search_ptr))))
     {
         insert_ptr = search_ptr;
@@ -303,7 +303,7 @@ void insert_block(void *bp, size_t size)
             SUCC_FREE(bp) = search_ptr;
             PRED_FREE(bp) = NULL;
             PRED_FREE(search_ptr) = bp;
-            segregation_list[list] = bp;
+            seg_list[list] = bp;
         }
     }
     else
@@ -318,7 +318,7 @@ void insert_block(void *bp, size_t size)
         {
             SUCC_FREE(bp) = NULL;
             PRED_FREE(bp) = NULL;
-            segregation_list[list] = bp;
+            seg_list[list] = bp;
         }
     }
     return;
@@ -345,7 +345,7 @@ void remove_block(void *bp)
         else
         {
             PRED_FREE(SUCC_FREE(bp)) = NULL;
-            segregation_list[list] = SUCC_FREE(bp);
+            seg_list[list] = SUCC_FREE(bp);
         }
     }
     else
@@ -356,7 +356,7 @@ void remove_block(void *bp)
         }
         else
         {
-            segregation_list[list] = NULL;
+            seg_list[list] = NULL;
         }
     }
     return;
